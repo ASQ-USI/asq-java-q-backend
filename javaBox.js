@@ -74,26 +74,31 @@ function waitCmdExit(container, exec, nextCommand, stream) {
 
     let checkExit = (err, data) => {
 
-        console.log('Exit code: ', data.ExitCode);
-
-        if ((data.ExitCode === 0) && (nextCommand)) {
+        if (data.Running) { // command is still running, check later
+            waitCmdExit(container, exec, nextCommand, stream);
+        }
+        else if ((data.ExitCode === 0) && (nextCommand)) { // command successful, has next command
             nextCommand(container);
         }
-        else if (data.ExitCode === 0) {
+        else if (data.ExitCode === 0) { // command successful, it was the last command
 
             let feedBack = {
                 clientId: container.clientId,
                 passed: true,
                 output: stream.read().toString().replace(/\u0000|\u0001/g, '').trim(),
                 errorMessage: '',
-                timeOut: false
             };
-            console.log(feedBack);
-
             javaBox.emit('result', feedBack);
         }
-        else {
-            waitCmdExit(container, exec, nextCommand, stream);
+        else { // command failed
+
+            let feedBack = {
+                clientId: container.clientId,
+                passed: false,
+                output: '',
+                errorMessage: stream.read().toString().replace(/\u0000|\u0001/g, '').trim(),
+            };
+            javaBox.emit('result', feedBack);
         }
     };
 

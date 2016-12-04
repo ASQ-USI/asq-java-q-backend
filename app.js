@@ -32,6 +32,7 @@ function runSingleClass(clientId, code) {
 }
 
 function giveFeedBack(feedBack) {
+    feedBack['timeOut'] = false;
     server.emit('result', feedBack);
 };
 

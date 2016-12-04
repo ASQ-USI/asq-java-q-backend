@@ -10,7 +10,7 @@ socket.on('connect', function() { //Don't send until we're connected
     let message = {
         clientId : '1234',
         fileName : 'someFile',
-        code : 'public class Main {public static void main(String[] args) {System.out.println("Hello world.");}}',
+        code : 'public Main {public static void main(String[] args) {System.out.println("Hello world.");}}',
         timeLimit : 10
     };
     console.log('socket is sending a message');
