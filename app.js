@@ -9,7 +9,7 @@ const javaBox = require('./javaBox');
 
 // Test
 server.on('runJava', runSingleClass);
-javaBox.on('result', () => console.log('javaBox should have executed the last command'));
+javaBox.on('result', giveFeedBack);
 
 
 function runSingleClass(clientId, code) {
@@ -21,8 +21,8 @@ function runSingleClass(clientId, code) {
     let tarPath = dirPath + '.tar';
     let filePath = dirPath + '/Main.java';
 
-    fs.mkdir('./dockerFiles/');
-    fs.mkdir(dirPath);
+    if (!fs.existsSync('./dockerFiles')) fs.mkdir('./dockerFiles/');
+    if (!fs.existsSync(dirPath)) fs.mkdir(dirPath);
     fs.createWriteStream(filePath).write(code);
 
     tar.pack(dirPath).pipe(fs.createWriteStream(tarPath));
@@ -30,6 +30,10 @@ function runSingleClass(clientId, code) {
     javaBox.emit('runJava', clientId, tarPath);
     console.log('instructions passed to javaBox');
 }
+
+function giveFeedBack(feedBack) {
+    server.emit('result', feedBack);
+};
 
 server.listen(PORT);
 

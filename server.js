@@ -32,19 +32,11 @@ function initSocket(connection) {
     socket.on('message', parseMessage);
 };
 
-function sendResult(clientId) {
+function sendResult(feedback) {
 
-    let socket = clients.clientId;
+    let socket = clients[feedback.clientId];
 
-    let response = {
-        clientId: clientId,
-        passed : passed,
-        ouptut : output,
-        errorMessage : error,
-        timeOut : false
-    };
-
-    socket.sendEndMessage(response);
+    socket.sendEndMessage(feedback);
 }
 
 

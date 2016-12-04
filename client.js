@@ -16,6 +16,6 @@ socket.on('connect', function() { //Don't send until we're connected
     console.log('socket is sending a message');
     socket.sendMessage(message);
     socket.on('message', function(message) {
-        console.log('The result is: '+message.result);
+        console.log(message);
     });
 });

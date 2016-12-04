@@ -10,6 +10,7 @@
 # Files to be pased to docker #
 #################
 dockerFiles/
+dockerFiles/*
 
 # Packages #
 ############

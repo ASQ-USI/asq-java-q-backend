@@ -71,18 +71,26 @@ function dockerCommand(command, nexCommand) {
 function waitCmdExit(container, exec, nextCommand, stream) {
 
     console.log('waiting for command to finish');
-    console.log('stream is undefined: ', stream === undefined);
 
     let checkExit = (err, data) => {
+
+        console.log('Exit code: ', data.ExitCode);
 
         if ((data.ExitCode === 0) && (nextCommand)) {
             nextCommand(container);
         }
         else if (data.ExitCode === 0) {
-            stream.setEncoding('utf8');
-            console.log(container.clientId);
-            console.log(stream.read());
-            javaBox.emit('result', container.clientId);
+
+            let feedBack = {
+                clientId: container.clientId,
+                passed: true,
+                output: stream.read().toString().replace(/\u0000|\u0001/g, '').trim(),
+                errorMessage: '',
+                timeOut: false
+            };
+            console.log(feedBack);
+
+            javaBox.emit('result', feedBack);
         }
         else {
             waitCmdExit(container, exec, nextCommand, stream);
