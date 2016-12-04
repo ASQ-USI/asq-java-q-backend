@@ -8,27 +8,27 @@ const server = require('./server');
 const javaBox = require('./javaBox');
 
 // Test
-server.on('testDocker', (socket) => {
-    javaBox.emit('testDocker', socket);
-}).on('testJava', (socket) => {
-    javaBox.emit('testJava', socket);
-}).on('runJava', runSingleClass);
+server.on('runJava', runSingleClass);
+javaBox.on('result', () => console.log('javaBox should have executed the last command'));
 
 
-function runSingleClass(socket, data) {
+function runSingleClass(clientId, code) {
 
-    console.log(data);
+    console.log('Ok some code:');
+    console.log(clientId, code);
 
-    let dirPath = './dockerFiles/singleClass';
+    let dirPath = './dockerFiles/' + clientId;
     let tarPath = dirPath + '.tar';
     let filePath = dirPath + '/Main.java';
 
-    fs.mkdir(dirPath, (err) => console.log('directory created'));
-    fs.createWriteStream(filePath).write(data);
+    fs.mkdir('./dockerFiles/');
+    fs.mkdir(dirPath);
+    fs.createWriteStream(filePath).write(code);
 
     tar.pack(dirPath).pipe(fs.createWriteStream(tarPath));
 
-    javaBox.emit('runJava', socket, tarPath);
+    javaBox.emit('runJava', clientId, tarPath);
+    console.log('instructions passed to javaBox');
 }
 
 server.listen(PORT);

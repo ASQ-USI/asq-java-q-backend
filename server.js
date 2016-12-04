@@ -1,34 +1,51 @@
 const net = require('net');
+const JsonSocket = require('json-socket');
+
+
+// Object containing clients list and relative sockets
+const clients = {};
 
 // Server eventEmitter
 const server = net.createServer();
 
 server.on('connection', initSocket);
+server.on('result', sendResult);
 
 
 // Init newly created socket
-function initSocket(socket) {
+function initSocket(connection) {
 
-    function parseInputData(data) {
-        data = data.trim();
+    let socket = new JsonSocket(connection);
 
-        if (data === 'test docker') {
-            server.emit('testDocker', socket);
-        }
-        else if (data == 'test java') {
-            server.emit('testJava', socket);
-        }
-        else {
-            server.emit('runJava', socket, data);
-        }
-    }
+    let parseMessage = (message) => {
 
-    socket.setEncoding('utf8');
+        let clientId = message.clientId;
+        let fileName = message.fileName;
+        let code = message.code;
+        let timeLimit = message.timeLimit;
 
-    socket.on('data', parseInputData);
+        clients[clientId] = socket;
+
+        server.emit('runJava', clientId, code);
+    };
+
+    socket.on('message', parseMessage);
+};
+
+function sendResult(clientId) {
+
+    let socket = clients.clientId;
+
+    let response = {
+        clientId: clientId,
+        passed : passed,
+        ouptut : output,
+        errorMessage : error,
+        timeOut : false
+    };
+
+    socket.sendEndMessage(response);
 }
-
-
 
 
 module.exports = server;
