@@ -1,0 +1,16 @@
+{
+  "name": "javabox",
+  "version": "1.0.0",
+  "description": "Server to procede java code",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "dockerode": "^2.3.1",
+    "node-monkey": "^1.0.0-beta.4",
+    "tar-fs": "^1.14.0"
+  }
+}
