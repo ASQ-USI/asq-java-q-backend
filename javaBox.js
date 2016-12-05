@@ -85,7 +85,8 @@ function waitCmdExit(container, exec, nextCommand, stream) {
             let feedBack = {
                 clientId: container.clientId,
                 passed: true,
-                output: stream.read().toString().replace(/\u0000|\u0001/g, '').trim(),
+                output: stream.read().toString(),
+                //output: stream.read().toString().replace(/\u0000|\u0001/g, '').trim(),
                 errorMessage: '',
             };
             javaBox.emit('result', feedBack);
@@ -96,7 +97,8 @@ function waitCmdExit(container, exec, nextCommand, stream) {
                 clientId: container.clientId,
                 passed: false,
                 output: '',
-                errorMessage: stream.read().toString().replace(/\u0000|\u0001/g, '').trim(),
+                errorMessage: stream.read().toString(),
+                //errorMessage: stream.read().toString().replace(/\u0000|\u0001/g, '').trim(),
             };
             javaBox.emit('result', feedBack);
         }

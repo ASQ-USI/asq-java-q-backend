@@ -20,7 +20,6 @@ function initSocket(connection) {
     let parseMessage = (message) => {
 
         let clientId = message.clientId;
-        let fileName = message.fileName;
         let code = message.code;
         let timeLimit = message.timeLimit;
 

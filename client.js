@@ -1,21 +1,25 @@
-var net = require('net'),
-    JsonSocket = require('json-socket');
+const net = require('net');
+const JsonSocket = require('json-socket');
 
-var port = 5000; //The same port that the server is listening on
+var port = 5000;
 var host = '127.0.0.1';
-var socket = new JsonSocket(new net.Socket()); //Decorate a standard net.Socket with JsonSocket
+
+var socket = new JsonSocket(new net.Socket());
 socket.connect(port, host);
 
-socket.on('connect', function() { //Don't send until we're connected
+socket.on('connect', function() {
+
     let message = {
         clientId : '1234',
         fileName : 'someFile',
-        code : 'public Main {public static void main(String[] args) {System.out.println("Hello world.");}}',
+        code : 'public class Main {public static void main(String[] args) {System.out.println("Hello world!");}}',
         timeLimit : 10
     };
-    console.log('socket is sending a message');
+
     socket.sendMessage(message);
+
     socket.on('message', function(message) {
         console.log(message);
+        console.log(message.errorMessage);
     });
 });
