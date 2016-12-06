@@ -23,7 +23,7 @@ function runJava(clientId, fileName, tarPath) {
     let execution = dockerCommand(javacCmd, dockerCommand(javaCmd));
 
     createJContainer(clientId, souceLocation, execution);
-}
+};
 
 
 // Creates and start a container with bash, JDK SE and more
@@ -106,6 +106,18 @@ function waitCmdExit(container, exec, nextCommand, stream) {
 
     setTimeout(() => exec.inspect(checkExit), EXEC_WAIT_TIME);
 };
+
+function sendResponse() {
+
+    let feedBack = {
+        clientId: container.clientId,
+        passed: false,
+        output: '',
+        errorMessage: stream.read().toString(),
+        //errorMessage: stream.read().toString().replace(/\u0000|\u0001/g, '').trim(),
+    };
+    javaBox.emit('result', feedBack);
+}
 
 
 module.exports = javaBox;

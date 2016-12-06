@@ -24,7 +24,11 @@ function initSocket(connection) {
         let code = message.code;
         let timeLimit = message.timeLimit;
 
-        clients[clientId] = socket;
+        if (!(clientId && fileName && code && timeLimit)) {
+            sendResult({});
+        }
+
+        clients[message.clientId] = socket;
 
         server.emit('runJava', clientId, fileName, code);
     };
