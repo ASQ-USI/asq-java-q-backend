@@ -89,7 +89,11 @@ function waitCmdExit(container, exec, nextCommand, stream) {
                 //output: stream.read().toString().replace(/\u0000|\u0001/g, '').trim(),
                 errorMessage: '',
             };
+
             javaBox.emit('result', feedBack);
+
+            container.kill({}, () => console.log('container killed'));
+            container.remove({}, () => console.log('container removed'));
         }
         else { // command failed
 
@@ -100,7 +104,11 @@ function waitCmdExit(container, exec, nextCommand, stream) {
                 errorMessage: stream.read().toString(),
                 //errorMessage: stream.read().toString().replace(/\u0000|\u0001/g, '').trim(),
             };
+
             javaBox.emit('result', feedBack);
+
+            container.kill({}, () => console.log('container killed'));
+            container.remove({}, () => console.log('container removed'));
         }
     };
 
