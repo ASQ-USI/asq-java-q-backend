@@ -12,14 +12,14 @@ server.on('runJava', runSingleClass);
 javaBox.on('result', giveFeedBack);
 
 
-function runSingleClass(clientId, code) {
+function runSingleClass(clientId, fileName, code) {
 
     console.log('Ok some code:');
     console.log(clientId, code);
 
     let dirPath = './dockerFiles/' + clientId;
     let tarPath = dirPath + '.tar';
-    let filePath = dirPath + '/Main.java';
+    let filePath = dirPath + '/' + fileName + '.java';
 
     if (!fs.existsSync('./dockerFiles')) fs.mkdir('./dockerFiles/');
     if (!fs.existsSync(dirPath)) fs.mkdir(dirPath);
@@ -27,7 +27,7 @@ function runSingleClass(clientId, code) {
 
     tar.pack(dirPath).pipe(fs.createWriteStream(tarPath));
 
-    javaBox.emit('runJava', clientId, tarPath);
+    javaBox.emit('runJava', clientId, fileName, tarPath);
     console.log('instructions passed to javaBox');
 }
 

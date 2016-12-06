@@ -5,7 +5,7 @@ const Docker = require('dockerode');
 const docker = new Docker();
 
 // Time to wait between checking that the command has been executed (milliseconds)
-const EXEC_WAIT_TIME = 100;
+const EXEC_WAIT_TIME = 250;
 
 
 // JavaBox eventEmitter
@@ -15,9 +15,9 @@ javaBox.on('runJava', runJava);
 
 
 // Run the Main.java inside the tar and outputs the result to the socket
-function runJava(clientId, tarPath) {
-    let javacCmd = ['javac', 'home/Main.java'];
-    let javaCmd = ['java', '-cp', 'home', 'Main'];
+function runJava(clientId, fileName, tarPath) {
+    let javacCmd = ['javac', 'home/' + fileName + '.java'];
+    let javaCmd = ['java', '-cp', 'home', fileName];
 
     let souceLocation = tarPath;
     let execution = dockerCommand(javacCmd, dockerCommand(javaCmd));

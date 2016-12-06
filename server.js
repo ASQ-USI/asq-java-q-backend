@@ -20,18 +20,21 @@ function initSocket(connection) {
     let parseMessage = (message) => {
 
         let clientId = message.clientId;
+        let fileName = message.fileName;
         let code = message.code;
         let timeLimit = message.timeLimit;
 
         clients[clientId] = socket;
 
-        server.emit('runJava', clientId, code);
+        server.emit('runJava', clientId, fileName, code);
     };
 
     socket.on('message', parseMessage);
 };
 
 function sendResult(feedback) {
+
+    console.log('sending result');
 
     let socket = clients[feedback.clientId];
 
