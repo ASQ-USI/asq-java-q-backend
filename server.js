@@ -25,6 +25,8 @@ function initSocket(connection) {
         const timeLimit = message.timeLimit;
 
         if (!(clientId && fileName && code && timeLimit)) {
+            console.log('invalid message:');
+            console.log(message);
             sendResult({});
         }
 
@@ -40,7 +42,12 @@ function sendResult(feedback) {
 
     const socket = clients[feedback.clientId];
 
-    socket.sendEndMessage(feedback);
+    try {
+        socket.sendEndMessage(feedback);
+    } catch (e) {
+        console.log('socket closed before sending result back');
+    }
+
 }
 
 
