@@ -1,6 +1,5 @@
 const EventEmitter = require('events');
 const Docker = require('dockerode');
-var fs = require('fs');
 
 // Docker connection
 const docker = new Docker();
