@@ -21,14 +21,25 @@ function runSingleClass(clientId, fileName, code) {
     let tarPath = dirPath + '.tar';
     let filePath = dirPath + '/' + fileName + '.java';
 
-    if (!fs.existsSync('./dockerFiles')) fs.mkdir('./dockerFiles/');
-    if (!fs.existsSync(dirPath)) fs.mkdir(dirPath);
-    fs.createWriteStream(filePath).write(code);
+    let createDocketFiles = () => {
+        if (!fs.existsSync('./dockerFiles')) fs.mkdir('./dockerFiles/', createDirPath);
+        else createDirPath();
+    };
+    let createDirPath = () => {
+        if (!fs.existsSync(dirPath)) fs.mkdir(dirPath, writeFile);
+        else writeFile();
+    };
+    let writeFile = () => {
+        fs.createWriteStream(filePath).write(code, makeTarAndRun);
+    };
+    let makeTarAndRun = () => {
+        tar.pack(dirPath).pipe(fs.createWriteStream(tarPath));
 
-    tar.pack(dirPath).pipe(fs.createWriteStream(tarPath));
+        javaBox.emit('runJava', clientId, fileName, tarPath);
+        console.log('instructions passed to javaBox');
+    };
 
-    javaBox.emit('runJava', clientId, fileName, tarPath);
-    console.log('instructions passed to javaBox');
+    createDocketFiles();
 }
 
 function giveFeedBack(feedBack) {
