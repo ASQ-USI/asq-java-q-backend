@@ -20,11 +20,12 @@ function runSingleClass(clientId, fileName, code) {
 
     const writeFile = () => {
 
-        fs.createWriteStream(filePath).write(code);
+        const makeTarAndRun = () => {
+            tar.pack(dirPath).pipe(fs.createWriteStream(tarPath));
+            javaBox.emit('runJava', clientId, fileName, tarPath);
+        };
 
-        tar.pack(dirPath).pipe(fs.createWriteStream(tarPath));
-
-        javaBox.emit('runJava', clientId, fileName, tarPath);
+        fs.createWriteStream(filePath).write(code, makeTarAndRun);
     };
 
     const manageClientDir = () => {
