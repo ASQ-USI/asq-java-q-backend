@@ -5,7 +5,7 @@ const Docker = require('dockerode');
 const docker = new Docker();
 
 // Time to wait between checking that the command has been executed (milliseconds)
-const EXEC_WAIT_TIME = 250;
+const EXEC_WAIT_TIME = 200;
 
 
 // JavaBox eventEmitter
@@ -71,6 +71,46 @@ function dockerCommand(command, nexCommand) {
 function waitCmdExit(container, exec, nextCommand, stream) {
 
     console.log('waiting for command to finish');
+
+    /*stream.on('readable', () => {
+
+        exec.inspect((err, data) => {
+
+            if ((data.ExitCode === 0) && (nextCommand)) { // command successful, has next command
+                nextCommand(container);
+            }
+            else if (data.ExitCode === 0) { // command successful, it was the last command
+
+                let feedBack = {
+                    clientId: container.clientId,
+                    passed: true,
+                    output: stream.read().toString(),
+                    //output: stream.read().toString().replace(/\u0000|\u0001/g, '').trim(),
+                    errorMessage: '',
+                };
+
+                javaBox.emit('result', feedBack);
+
+                container.kill({}, () => console.log('container killed'));
+                container.remove({}, () => console.log('container removed'));
+            }
+            else { // command failed
+
+                let feedBack = {
+                    clientId: container.clientId,
+                    passed: false,
+                    output: '',
+                    errorMessage: stream.read().toString(),
+                    //errorMessage: stream.read().toString().replace(/\u0000|\u0001/g, '').trim(),
+                };
+
+                javaBox.emit('result', feedBack);
+
+                container.kill({}, () => console.log('container killed'));
+                container.remove({}, () => console.log('container removed'));
+            }
+        })
+    });*/
 
     let checkExit = (err, data) => {
 
