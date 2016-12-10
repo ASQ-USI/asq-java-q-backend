@@ -15,14 +15,14 @@ server.on('result', sendResult);
 // Init newly created socket
 function initSocket(connection) {
 
-    let socket = new JsonSocket(connection);
+    const socket = new JsonSocket(connection);
 
-    let parseMessage = (message) => {
+    const parseMessage = (message) => {
 
-        let clientId = message.clientId;
-        let fileName = message.fileName;
-        let code = message.code;
-        let timeLimit = message.timeLimit;
+        const clientId = message.clientId;
+        const fileName = message.fileName;
+        const code = message.code;
+        const timeLimit = message.timeLimit;
 
         if (!(clientId && fileName && code && timeLimit)) {
             sendResult({});
@@ -38,7 +38,7 @@ function initSocket(connection) {
 
 function sendResult(feedback) {
 
-    let socket = clients[feedback.clientId];
+    const socket = clients[feedback.clientId];
 
     socket.sendEndMessage(feedback);
 }
