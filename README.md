@@ -9,35 +9,44 @@ It uses /var/run/docker.socket to connect to it, so on windows it may not be wor
 
 Before running the server the first time do:
 - Run docker
-- Run 'docker run openjdk' in terminal
+- Run ```$ docker pull openjdk``` in terminal
 
 
 ### Communication API
 
+
 Request :
-{
-clientId : String,
+```
+{clientId : String,
 fileName : String,
 code : String,
-timeLimit : Integer
-}
+timeLimit : Integer}
+```
 
 Response:
-{
-clientId: String,
+```
+{clientId: String,
 passed: Boolean,
 output: String,
 errorMessage: String,
-timeOut: Boolean
-}
+timeOut: Boolean}
+```
 
 ### Work with docker in terminal
 
 - Run image in docker: 
-    docker run image
+```
+$ docker run image
+```
 - List docker containers:
-    docker ps -a
+```
+$ docker ps -a
+```
 - Kill all docker containers:
-    docker kill $(docker ps -aq)
+```
+$ docker kill $(docker ps -aq)
+```
 - Remove all docker containers:
-    docker rm $(docker ps -aq)
+```
+$ docker rm -v $(docker ps -aq)
+```

@@ -1,23 +1,21 @@
 const net = require('net');
 const JsonSocket = require('json-socket');
 
-var port = 5000;
-var host = '127.0.0.1';
+const port = 5000;
+const host = '127.0.0.1';
 
 
 function makeConnection(clientId) {
 
-    console.log('make connection');
-
-    var socket = new JsonSocket(new net.Socket());
+    const socket = new JsonSocket(new net.Socket());
     socket.connect(port, host);
 
     socket.on('connect', function() {
 
-        let message = {
+        const message = {
             clientId : clientId,
-            fileName : 'SomeClass',
-            code : 'public class SomeClass {public static void main(String[] args) {System.out.println("Hello world!");}}',
+            fileName : 'Mainone.java',
+            code : 'public class Mainone {public static void main(String[] args) {System.out.println("Hello world!");}}',
             timeLimit : 10
         };
 
@@ -33,6 +31,6 @@ function makeConnection(clientId) {
 
 
 for (var i=0; i<1; i++) {
-    let clientId = 'client' + i;
+    const clientId = 'client' + i;
     makeConnection(clientId);
 };

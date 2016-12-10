@@ -38,8 +38,6 @@ function initSocket(connection) {
 
 function sendResult(feedback) {
 
-    console.log('sending result');
-
     let socket = clients[feedback.clientId];
 
     socket.sendEndMessage(feedback);

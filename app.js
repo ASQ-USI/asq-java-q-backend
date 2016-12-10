@@ -1,5 +1,5 @@
-var tar = require('tar-fs');
-var fs = require('fs');
+const tar = require('tar-fs');
+const fs = require('fs');
 
 const PORT = 5000;
 
@@ -7,33 +7,87 @@ const PORT = 5000;
 const server = require('./server');
 const javaBox = require('./javaBox');
 
-// Test
+
 server.on('runJava', runSingleClass);
 javaBox.on('result', giveFeedBack);
 
 
 function runSingleClass(clientId, fileName, code) {
 
-    console.log('Ok some code:');
-    console.log(clientId, code);
+    const dirPath = `./dockerFiles/${clientId}`;
+    const tarPath = `${dirPath}.tar`;
+    const filePath = `${dirPath}/${fileName}`;
 
-    let dirPath = './dockerFiles/' + clientId;
-    let tarPath = dirPath + '.tar';
-    let filePath = dirPath + '/' + fileName + '.java';
+    const writeFile = () => {
 
-    if (!fs.existsSync('./dockerFiles')) fs.mkdir('./dockerFiles/');
-    if (!fs.existsSync(dirPath)) fs.mkdir(dirPath);
-    fs.createWriteStream(filePath).write(code);
+        fs.createWriteStream(filePath).write(code);
 
-    tar.pack(dirPath).pipe(fs.createWriteStream(tarPath));
+        tar.pack(dirPath).pipe(fs.createWriteStream(tarPath));
 
-    javaBox.emit('runJava', clientId, fileName, tarPath);
-    console.log('instructions passed to javaBox');
+        javaBox.emit('runJava', clientId, fileName, tarPath);
+    };
+
+    const manageClientDir = () => {
+
+        fs.access(dirPath, (err) => {
+
+            if (err) {
+                fs.mkdir(dirPath, writeFile);
+            } else {
+                emptyDirectory(dirPath, writeFile, fileName);
+            };
+        });
+    };
+
+    const manageDockerDir = () => {
+
+        fs.access('./dockerFiles/', (err) => {
+
+            if (err) {
+                fs.mkdir('./dockerFiles/', manageClientDir);
+            } else {
+                manageClientDir();
+            };
+        });
+    };
+
+    manageDockerDir();
 }
 
 function giveFeedBack(feedBack) {
     feedBack['timeOut'] = false;
     server.emit('result', feedBack);
+};
+
+
+function emptyDirectory(dirPath, callback, exceptionFile) {
+
+    fs.readdir(dirPath, (err, files) => {
+
+        let filesToDelete = files.length;
+        if (filesToDelete === 0) {
+            callback();
+        }
+
+        const tryCallback = (callback) => {
+
+            filesToDelete--;
+
+            if (filesToDelete === 0) {
+                callback();
+            }
+        };
+
+        files.forEach((file) => {
+
+            if (file === exceptionFile) {
+                tryCallback(callback);
+            }
+            else {
+                fs.unlink(`${dirPath}/${file}`, tryCallback(callback));
+            }
+        });
+    });
 };
 
 server.listen(PORT);

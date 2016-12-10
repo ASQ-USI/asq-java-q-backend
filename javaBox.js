@@ -1,11 +1,12 @@
 const EventEmitter = require('events');
 const Docker = require('dockerode');
+var fs = require('fs');
 
 // Docker connection
 const docker = new Docker();
 
 // Time to wait between checking that the command has been executed (milliseconds)
-const EXEC_WAIT_TIME = 250;
+const EXEC_WAIT_TIME_MS = 250;
 
 
 // JavaBox eventEmitter
@@ -16,11 +17,14 @@ javaBox.on('runJava', runJava);
 
 // Run the Main.java inside the tar and outputs the result to the socket
 function runJava(clientId, fileName, tarPath) {
-    let javacCmd = ['javac', 'home/' + fileName + '.java'];
-    let javaCmd = ['java', '-cp', 'home', fileName];
 
-    let souceLocation = tarPath;
-    let execution = dockerCommand(javacCmd, dockerCommand(javaCmd));
+    const className = fileName.split('.')[0];
+
+    const javacCmd = ['javac', 'home/' + fileName];
+    const javaCmd = ['java', '-cp', 'home', className];
+
+    const souceLocation = tarPath;
+    const execution = dockerCommand(javacCmd, dockerCommand(javaCmd));
 
     createJContainer(clientId, souceLocation, execution);
 };
@@ -29,18 +33,17 @@ function runJava(clientId, fileName, tarPath) {
 // Creates and start a container with bash, JDK SE and more
 function createJContainer(clientId, javaSourceTar, callback) {
 
-    let opts = {Image: 'openjdk', Tty: true, Cmd: ['/bin/bash']};
-    docker.createContainer(opts, (err, container) => {
+    const createOpts = {Image: 'openjdk', Tty: true, Cmd: ['/bin/bash']};
+    docker.createContainer(createOpts, (err, container) => {
 
         container['clientId'] = clientId;
 
-        let opts = {};
-        container.start(opts, (err, data) => {
+        const startOpts = {};
+        container.start(startOpts, (err, data) => {
 
-            let opts = {path: 'home'};
-            container.putArchive(javaSourceTar, opts, (err, data) => {
+            const tarOpts = {path: 'home'};
+            container.putArchive(javaSourceTar, tarOpts, (err, data) => {
 
-                console.log('container created');
                 callback(container);
             });
         });
@@ -54,12 +57,11 @@ function createJContainer(clientId, javaSourceTar, callback) {
  */
 function dockerCommand(command, nexCommand) {
 
-    let opts = {Cmd: command, AttachStdout: true, AttachStderr: true};
+    const opts = {Cmd: command, AttachStdout: true, AttachStderr: true};
 
-    let execution = (container) => {
+    const execution = (container) => {
 
         container.exec(opts, (err, exec) => {
-            console.log('executing ', command);
             exec.start((err, stream) => waitCmdExit(container, exec, nexCommand, stream));
         });
     };
@@ -70,9 +72,7 @@ function dockerCommand(command, nexCommand) {
 // Ensures that the exec process is terminated and fires the next command
 function waitCmdExit(container, exec, nextCommand, stream) {
 
-    console.log('waiting for command to finish');
-
-    let checkExit = (err, data) => {
+    const checkExit = (err, data) => {
 
         if (data.Running) { // command is still running, check later
             waitCmdExit(container, exec, nextCommand, stream);
@@ -82,7 +82,7 @@ function waitCmdExit(container, exec, nextCommand, stream) {
         }
         else if (data.ExitCode === 0) { // command successful, it was the last command
 
-            let feedBack = {
+            const feedback = {
                 clientId: container.clientId,
                 passed: true,
                 output: stream.read().toString(),
@@ -90,14 +90,14 @@ function waitCmdExit(container, exec, nextCommand, stream) {
                 errorMessage: '',
             };
 
-            javaBox.emit('result', feedBack);
+            javaBox.emit('result', feedback);
 
-            container.kill({}, () => console.log('container killed'));
-            container.remove({}, () => console.log('container removed'));
+            container.kill({}, () => {});
+            container.remove({v: true}, () => {});
         }
         else { // command failed
 
-            let feedBack = {
+            const feedback = {
                 clientId: container.clientId,
                 passed: false,
                 output: '',
@@ -105,26 +105,26 @@ function waitCmdExit(container, exec, nextCommand, stream) {
                 //errorMessage: stream.read().toString().replace(/\u0000|\u0001/g, '').trim(),
             };
 
-            javaBox.emit('result', feedBack);
+            javaBox.emit('result', feedback);
 
-            container.kill({}, () => console.log('container killed'));
-            container.remove({}, () => console.log('container removed'));
+            container.kill({}, () => {});
+            container.remove({v: true}, () => {});
         }
     };
 
-    setTimeout(() => exec.inspect(checkExit), EXEC_WAIT_TIME);
+    setTimeout(() => exec.inspect(checkExit), EXEC_WAIT_TIME_MS);
 };
 
 function sendResponse() {
 
-    let feedBack = {
+    const feedback = {
         clientId: container.clientId,
         passed: false,
         output: '',
         errorMessage: stream.read().toString(),
         //errorMessage: stream.read().toString().replace(/\u0000|\u0001/g, '').trim(),
     };
-    javaBox.emit('result', feedBack);
+    javaBox.emit('result', feedback);
 }
 
 
