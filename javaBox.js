@@ -32,7 +32,7 @@ function runJava(clientId, main, tarPath, timeLimitCompile, timeLimitExecution) 
 // Creates and starts a container with bash, JDK SE and more
 function createJContainer(clientId, javaSourceTar, callback) {
 
-    const createOpts = {Image: 'openjdk', Tty: true, Cmd: ['/bin/bash']};
+    const createOpts = {Image: 'openjdk:8u111-jdk', Tty: true, Cmd: ['/bin/bash']};
     docker.createContainer(createOpts, (err, container) => {
 
         if (err) {callback(err, container); return}
