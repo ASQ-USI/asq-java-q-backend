@@ -91,8 +91,8 @@ function waitCmdExit(container, exec, nextCommand, stream) {
 
             javaBox.emit('result', feedback);
 
-            //container.kill({}, () => {});
-            //container.remove({v: true}, () => {});
+            container.kill({}, () => {});
+            container.remove({v: true}, () => {});
         }
         else { // command failed
 
@@ -106,8 +106,8 @@ function waitCmdExit(container, exec, nextCommand, stream) {
 
             javaBox.emit('result', feedback);
 
-            //container.kill({}, () => {});
-            //container.remove({v: true}, () => {});
+            container.kill({}, () => {});
+            container.remove({v: true}, () => {});
         }
     };
 

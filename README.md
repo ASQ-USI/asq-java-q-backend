@@ -17,19 +17,34 @@ Before running the server the first time do:
 
 Request :
 ```
-{clientId : String,
-fileName : String,
-code : String,
-timeLimit : Integer}
+{
+clientId : "1234",
+submission : 
+    {
+    main: 'Main.java',
+    files: [
+        {
+            name: "class1.java",
+            data: "void hello(){}"},
+        {
+            name: "Main.java",
+            data: "void main(String[] args){}"
+        }]
+    },
+timeLimitCompile : 200,
+timeLimitExecution : 200
+}
 ```
 
 Response:
 ```
-{clientId: String,
+{
+clientId: String,
 passed: Boolean,
 output: String,
 errorMessage: String,
-timeOut: Boolean}
+timeOut: Boolean
+}
 ```
 
 ### Work with docker in terminal
