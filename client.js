@@ -23,7 +23,10 @@ function makeConnection(clientId) {
                     name: 'Class2.java',
                     data: 'public class Class2 {public void sayHello() {System.out.println("Hello world!");}}'
                 }
-            ]}
+            ]},
+            timeLimitCompile : 10000,
+            timeLimitExecution : 10000
+
         };
 
         socket.sendMessage(message);

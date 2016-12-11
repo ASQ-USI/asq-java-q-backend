@@ -25,13 +25,17 @@ function initSocket(connection) {
         const timeLimitCompile = message.timeLimitCompile;
         const timeLimitExecution = message.timeLimitExecution;
 
-        if (!(clientId && main && files)) {
-            sendResult({});
-        }
-
         clients[message.clientId] = socket;
 
-        server.emit('runJava', clientId, main, files);
+
+        if (!(clientId && main && files && timeLimitCompile && timeLimitExecution)){
+            sendResult({clientId: clientId});
+            return;
+        }
+
+
+
+        server.emit('runJava', clientId, main, files, timeLimitCompile, timeLimitExecution);
     };
 
     socket.on('message', parseMessage);

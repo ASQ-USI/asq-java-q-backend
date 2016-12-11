@@ -15,17 +15,17 @@ javaBox.on('runJava', runJava);
 
 
 // Run the Main.java inside the tar and outputs the result to the socket
-function runJava(clientId, main, tarPath) {
+function runJava(clientId, main, tarPath, timeLimitCompile, timeLimitExecution) {
 
     const className = main.split('.')[0];
 
     const javacCmd = ['javac', '-cp', 'home', `home/${main}`];
     const javaCmd = ['java', '-cp', 'home', className];
 
-    const souceLocation = tarPath;
-    const execution = dockerCommand(javacCmd, dockerCommand(javaCmd));
+    const sourceLocation = tarPath;
+    const execution = dockerCommand(javacCmd, timeLimitCompile, dockerCommand(javaCmd, timeLimitExecution));
 
-    createJContainer(clientId, souceLocation, execution);
+    createJContainer(clientId, sourceLocation, execution);
 };
 
 
@@ -34,6 +34,8 @@ function createJContainer(clientId, javaSourceTar, callback) {
 
     const createOpts = {Image: 'openjdk', Tty: true, Cmd: ['/bin/bash']};
     docker.createContainer(createOpts, (err, container) => {
+
+        if (err) {console.log("Error creating container!"); return;}
 
         container['clientId'] = clientId;
 
@@ -54,14 +56,14 @@ function createJContainer(clientId, javaSourceTar, callback) {
  * executes a specific command, attaches the specific output listener and
  * after the command is executed pipelines the next one
  */
-function dockerCommand(command, nexCommand) {
+function dockerCommand(command, commandTimeLimit, nextCommand) {
 
     const opts = {Cmd: command, AttachStdout: true, AttachStderr: true};
 
     const execution = (container) => {
 
         container.exec(opts, (err, exec) => {
-            exec.start((err, stream) => waitCmdExit(container, exec, nexCommand, stream));
+            exec.start((err, stream) => waitCmdExit(container, exec, nextCommand, stream, commandTimeLimit));
         });
     };
 
@@ -69,12 +71,35 @@ function dockerCommand(command, nexCommand) {
 };
 
 // Ensures that the exec process is terminated and fires the next command
-function waitCmdExit(container, exec, nextCommand, stream) {
+function waitCmdExit(container, exec, nextCommand, stream, commandTimeOut, previousTime){
+
+    let timeSpent = previousTime || 0;
 
     const checkExit = (err, data) => {
 
-        if (data.Running) { // command is still running, check later
-            waitCmdExit(container, exec, nextCommand, stream);
+        if (data.Running) { // command is still running, check later or send time out
+
+            timeSpent += EXEC_WAIT_TIME_MS;                             // count time spent
+
+            if (timeSpent >= commandTimeOut){                           // time period expired
+
+                const feedback = {
+                    clientId: container.clientId,
+                    passed: false,
+                    output: '',
+                    errorMessage: "",
+                    timeOut: true
+                };
+
+                javaBox.emit('result', feedback);
+
+                container.kill({}, () => {});               // process is still running though, but it shouldn't matter
+                container.remove({v: true}, () => {});
+
+
+            }else {
+                waitCmdExit(container, exec, nextCommand, stream, commandTimeOut, timeSpent);
+            }
         }
         else if ((data.ExitCode === 0) && (nextCommand)) { // command successful, has next command
             nextCommand(container);
@@ -87,6 +112,8 @@ function waitCmdExit(container, exec, nextCommand, stream) {
                 output: stream.read().toString(),
                 //output: stream.read().toString().replace(/\u0000|\u0001/g, '').trim(),
                 errorMessage: '',
+                timeOut: false
+
             };
 
             javaBox.emit('result', feedback);
@@ -102,6 +129,8 @@ function waitCmdExit(container, exec, nextCommand, stream) {
                 output: '',
                 errorMessage: stream.read().toString(),
                 //errorMessage: stream.read().toString().replace(/\u0000|\u0001/g, '').trim(),
+                timeOut: false
+
             };
 
             javaBox.emit('result', feedback);
@@ -112,7 +141,7 @@ function waitCmdExit(container, exec, nextCommand, stream) {
     };
 
     setTimeout(() => exec.inspect(checkExit), EXEC_WAIT_TIME_MS);
-};
+}
 
 function sendResponse() {
 
