@@ -100,7 +100,7 @@ function runSingleClass(clientId, main, files, timeLimitCompile, timeLimitExecut
 }
 
 function giveFeedBack(feedBack) {
-    feedBack['timeOut'] = false;
+
     server.emit('result', feedBack);
 };
 
