@@ -7,9 +7,8 @@ Backend for sandboxed Java execution for the asq-java-q question type
 To run the service, you need docker running on the machine.
 It uses /var/run/docker.socket to connect to it, so on windows it may not be working.
 
-Before running the server the first time do:
-- Run docker
-- Run ```$ docker pull openjdk``` in terminal
+Before installing npm dependencies with ```$ npm install``` make sure that docker is running.
+Otherwise you need to do ```$ docker pull openjdk:8u111-jdk``` to download the right openjdk image.
 
 
 ### Communication API
