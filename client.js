@@ -24,8 +24,8 @@ function makeConnection(clientId) {
                     data: 'public class Class2 {public void sayHello() {System.out.println("Hello world!");}}'
                 }
             ]},
-            timeLimitCompile : 10000,
-            timeLimitExecution : 10000
+            timeLimitCompile : 1000,
+            timeLimitExecution : 100
 
         };
 
