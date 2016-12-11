@@ -12,7 +12,8 @@ server.on('runJava', runSingleClass);
 javaBox.on('result', giveFeedBack);
 
 
-function runSingleClass(clientId, main, files) {
+function runSingleClass(clientId, main, files, timeLimitCompile, timeLimitExecution) {
+
 
     const dirPath = `./dockerFiles/${clientId}`;
     const tarPath = `${dirPath}.tar`;
@@ -20,7 +21,7 @@ function runSingleClass(clientId, main, files) {
     const makeTarAndRun = () => {
 
         tar.pack(dirPath).pipe(fs.createWriteStream(tarPath));
-        javaBox.emit('runJava', clientId, main, tarPath);
+        javaBox.emit('runJava', clientId, main, tarPath, timeLimitCompile, timeLimitExecution);
     };
 
     const writeFiles = () => {
