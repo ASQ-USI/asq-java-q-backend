@@ -16,7 +16,6 @@ function runSingleClass(clientId, main, files) {
 
     const dirPath = `./dockerFiles/${clientId}`;
     const tarPath = `${dirPath}.tar`;
-    //const filePath = `${dirPath}/${fileName}`;
 
     const makeTarAndRun = () => {
 
