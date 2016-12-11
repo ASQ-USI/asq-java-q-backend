@@ -104,13 +104,16 @@ function waitCmdExit(container, exec, nextCommand, stream, commandTimeOut, previ
 
 
             } else {
+
             waitCmdExit(container, exec, nextCommand, stream, commandTimeOut, timeSpent);
+
             }
-        }
-        else if ((data.ExitCode === 0) && (nextCommand)) { // command successful, has next command
+
+        } else if ((data.ExitCode === 0) && (nextCommand)) { // command successful, has next command
+
             nextCommand(null, container);
-        }
-        else if (data.ExitCode === 0) { // command successful, it was the last command
+
+        } else if (data.ExitCode === 0) { // command successful, it was the last command
 
             const feedback = {
                 clientId: container.clientId,
@@ -125,8 +128,8 @@ function waitCmdExit(container, exec, nextCommand, stream, commandTimeOut, previ
 
             container.kill({}, () => {});
             container.remove({v: true}, () => {});
-        }
-        else { // command failed
+
+        } else { // command failed
 
             const feedback = {
                 clientId: container.clientId,
