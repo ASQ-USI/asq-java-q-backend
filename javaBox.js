@@ -87,7 +87,7 @@ function waitCmdExit(container, exec, nextCommand, stream, commandTimeOut, previ
 
             timeSpent += EXEC_WAIT_TIME_MS;                             // count time spent
 
-            if (timeSpent >= commandTimeOut){                           // time period expired
+            if (timeSpent >= commandTimeOut) {                           // time period expired
 
                 const feedback = {
                     clientId: container.clientId,
@@ -102,8 +102,7 @@ function waitCmdExit(container, exec, nextCommand, stream, commandTimeOut, previ
                 container.kill({}, () => {});               // process is still running though, but it shouldn't matter
                 container.remove({v: true}, () => {});
 
-
-            }else {
+            } else {
                 waitCmdExit(container, exec, nextCommand, stream, commandTimeOut, timeSpent);
             }
         }
