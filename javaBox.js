@@ -19,7 +19,7 @@ function runJava(clientId, main, tarPath) {
 
     const className = main.split('.')[0];
 
-    const javacCmd = ['javac', 'home/' + main];
+    const javacCmd = ['javac', '-cp', 'home', `home/${main}`];
     const javaCmd = ['java', '-cp', 'home', className];
 
     const souceLocation = tarPath;
@@ -91,8 +91,8 @@ function waitCmdExit(container, exec, nextCommand, stream) {
 
             javaBox.emit('result', feedback);
 
-            container.kill({}, () => {});
-            container.remove({v: true}, () => {});
+            //container.kill({}, () => {});
+            //container.remove({v: true}, () => {});
         }
         else { // command failed
 
@@ -106,8 +106,8 @@ function waitCmdExit(container, exec, nextCommand, stream) {
 
             javaBox.emit('result', feedback);
 
-            container.kill({}, () => {});
-            container.remove({v: true}, () => {});
+            //container.kill({}, () => {});
+            //container.remove({v: true}, () => {});
         }
     };
 

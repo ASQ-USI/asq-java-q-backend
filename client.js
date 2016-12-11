@@ -1,7 +1,7 @@
 const net = require('net');
 const JsonSocket = require('json-socket');
 
-const port = 5000;
+const port = 5016;
 const host = '127.0.0.1';
 
 
@@ -14,10 +14,14 @@ function makeConnection(clientId) {
 
         const message = {
             clientId : clientId,
-            submission : {main: 'Main.java', files: [
+            submission : {main: 'Class1.java', files: [
                 {
-                    name: 'Main.java',
-                    data: 'public class Main {public static void main(String[] args) {System.out.println("Hello world!");}}'
+                    name: 'Class1.java',
+                    data: 'public class Class1 {public static void main(String[] args) {Class2 c = new Class2(); c.sayHello();}}'
+                },
+                {
+                    name: 'Class2.java',
+                    data: 'public class Class2 {public void sayHello() {System.out.println("Hello world!");}}'
                 }
             ]}
         };

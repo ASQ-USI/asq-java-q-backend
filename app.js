@@ -1,7 +1,7 @@
 const tar = require('tar-fs');
 const fs = require('fs');
 
-const PORT = 5000;
+const PORT = 5016;
 
 // Two main eventEmitters of the application
 const server = require('./server');
@@ -104,53 +104,6 @@ function giveFeedBack(feedBack) {
     server.emit('result', feedBack);
 };
 
-
-/*function emptyDirectory(dirPath, newFiles, callback) {
-
-    fs.readdir(dirPath, (err, oldFiles) => {
-
-        let filesToDelete = oldFiles.length;
-        let filesToAdd = newFiles.length;
-
-        const newFilesNames = [];
-
-        const tryCallback = () => {
-
-            if ((filesToDelete === 0) && (filesToAdd === 0)) {
-                callback();
-            }
-        };
-
-        const fileAdded = () => {
-
-            filesToAdd--;
-            tryCallback();
-        };
-
-        const fileDeleted = () => {
-
-            filesToDelete--;
-            tryCallback();
-        }
-
-        newFiles.forEach((newFile) => {
-
-            newFilesNames.add(newFile.name);
-
-            fs.createWriteStream(filePath).write(code, fileAdded);
-        });
-
-        oldFiles.forEach((oldFile) => {
-
-            if (newFilesNames.includes(oldFile)) {
-                fileDeleted();
-            }
-            else {
-                fs.unlink(`${dirPath}/${oldFile}`, fileDeleted);
-            }
-        });
-    });
-};*/
 
 server.listen(PORT);
 
