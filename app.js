@@ -12,20 +12,64 @@ server.on('runJava', runSingleClass);
 javaBox.on('result', giveFeedBack);
 
 
-function runSingleClass(clientId, fileName, code) {
+function runSingleClass(clientId, main, files) {
 
     const dirPath = `./dockerFiles/${clientId}`;
     const tarPath = `${dirPath}.tar`;
-    const filePath = `${dirPath}/${fileName}`;
+    //const filePath = `${dirPath}/${fileName}`;
 
-    const writeFile = () => {
+    const makeTarAndRun = () => {
 
-        const makeTarAndRun = () => {
-            tar.pack(dirPath).pipe(fs.createWriteStream(tarPath));
-            javaBox.emit('runJava', clientId, fileName, tarPath);
-        };
+        tar.pack(dirPath).pipe(fs.createWriteStream(tarPath));
+        javaBox.emit('runJava', clientId, main, tarPath);
+    };
 
-        fs.createWriteStream(filePath).write(code, makeTarAndRun);
+    const writeFiles = () => {
+
+        fs.readdir(dirPath, (err, oldFiles) => {
+
+            let filesToDelete = oldFiles.length;
+            let filesToAdd = files.length;
+
+            const newFilesNames = [];
+
+            const tryTarAndRun = () => {
+
+                if ((filesToDelete === 0) && (filesToAdd === 0)) {
+                    makeTarAndRun();
+                }
+            };
+
+            const fileAdded = () => {
+
+                filesToAdd--;
+                tryTarAndRun();
+            };
+
+            const fileDeleted = () => {
+
+                filesToDelete--;
+                tryTarAndRun();
+            };
+
+            files.forEach((file) => {
+
+                const filePath = `${dirPath}/${file.name}`;
+                newFilesNames.push(file.name);
+
+                fs.createWriteStream(filePath).write(file.data, fileAdded);
+            });
+
+            oldFiles.forEach((oldFile) => {
+
+                if (newFilesNames.includes(oldFile)) {
+                    fileDeleted();
+                }
+                else {
+                    fs.unlink(`${dirPath}/${oldFile}`, fileDeleted);
+                }
+            });
+        });
     };
 
     const manageClientDir = () => {
@@ -33,9 +77,9 @@ function runSingleClass(clientId, fileName, code) {
         fs.access(dirPath, (err) => {
 
             if (err) {
-                fs.mkdir(dirPath, writeFile);
+                fs.mkdir(dirPath, writeFiles);
             } else {
-                emptyDirectory(dirPath, writeFile, fileName);
+                writeFiles();
             };
         });
     };
@@ -61,35 +105,52 @@ function giveFeedBack(feedBack) {
 };
 
 
-function emptyDirectory(dirPath, callback, exceptionFile) {
+/*function emptyDirectory(dirPath, newFiles, callback) {
 
-    fs.readdir(dirPath, (err, files) => {
+    fs.readdir(dirPath, (err, oldFiles) => {
 
-        let filesToDelete = files.length;
-        if (filesToDelete === 0) {
-            callback();
-        }
+        let filesToDelete = oldFiles.length;
+        let filesToAdd = newFiles.length;
 
-        const tryCallback = (callback) => {
+        const newFilesNames = [];
 
-            filesToDelete--;
+        const tryCallback = () => {
 
-            if (filesToDelete === 0) {
+            if ((filesToDelete === 0) && (filesToAdd === 0)) {
                 callback();
             }
         };
 
-        files.forEach((file) => {
+        const fileAdded = () => {
 
-            if (file === exceptionFile) {
-                tryCallback(callback);
+            filesToAdd--;
+            tryCallback();
+        };
+
+        const fileDeleted = () => {
+
+            filesToDelete--;
+            tryCallback();
+        }
+
+        newFiles.forEach((newFile) => {
+
+            newFilesNames.add(newFile.name);
+
+            fs.createWriteStream(filePath).write(code, fileAdded);
+        });
+
+        oldFiles.forEach((oldFile) => {
+
+            if (newFilesNames.includes(oldFile)) {
+                fileDeleted();
             }
             else {
-                fs.unlink(`${dirPath}/${file}`, tryCallback(callback));
+                fs.unlink(`${dirPath}/${oldFile}`, fileDeleted);
             }
         });
     });
-};
+};*/
 
 server.listen(PORT);
 

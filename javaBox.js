@@ -15,11 +15,11 @@ javaBox.on('runJava', runJava);
 
 
 // Run the Main.java inside the tar and outputs the result to the socket
-function runJava(clientId, fileName, tarPath) {
+function runJava(clientId, main, tarPath) {
 
-    const className = fileName.split('.')[0];
+    const className = main.split('.')[0];
 
-    const javacCmd = ['javac', 'home/' + fileName];
+    const javacCmd = ['javac', 'home/' + main];
     const javaCmd = ['java', '-cp', 'home', className];
 
     const souceLocation = tarPath;

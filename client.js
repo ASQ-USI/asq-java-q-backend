@@ -14,9 +14,12 @@ function makeConnection(clientId) {
 
         const message = {
             clientId : clientId,
-            fileName : 'Mainone.java',
-            code : 'public class Mainone {public static void main(String[] args) {System.out.println("Hello world!");}}',
-            timeLimit : 10
+            submission : {main: 'Main.java', files: [
+                {
+                    name: 'Main.java',
+                    data: 'public class Main {public static void main(String[] args) {System.out.println("Hello world!");}}'
+                }
+            ]}
         };
 
         socket.sendMessage(message);

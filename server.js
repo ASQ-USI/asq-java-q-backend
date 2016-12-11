@@ -20,19 +20,18 @@ function initSocket(connection) {
     const parseMessage = (message) => {
 
         const clientId = message.clientId;
-        const fileName = message.fileName;
-        const code = message.code;
-        const timeLimit = message.timeLimit;
+        const main = message.submission.main;
+        const files = message.submission.files;
+        const timeLimitCompile = message.timeLimitCompile;
+        const timeLimitExecution = message.timeLimitExecution;
 
-        if (!(clientId && fileName && code && timeLimit)) {
-            console.log('invalid message:');
-            console.log(message);
+        if (!(clientId && main && files)) {
             sendResult({});
         }
 
         clients[message.clientId] = socket;
 
-        server.emit('runJava', clientId, fileName, code);
+        server.emit('runJava', clientId, main, files);
     };
 
     socket.on('message', parseMessage);
