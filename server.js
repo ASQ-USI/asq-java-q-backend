@@ -33,6 +33,11 @@ function initSocket(connection) {
             return;
         }
 
+        if (!(timeLimitCompile > 0 && timeLimitExecution > 0)){             // illogical values for timeout
+            sendResult({clientId: clientId});
+            return;
+        }
+
 
 
         server.emit('runJava', clientId, main, files, timeLimitCompile, timeLimitExecution);
