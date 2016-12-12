@@ -120,18 +120,20 @@ public class AllTests
 
         };
 
+        console.time(clientId);
+
         socket.sendMessage(message);
 
         socket.on('message', function(message) {
             console.log(message);
             console.log(message.output);
             console.log(message.errorMessage);
+            console.timeEnd(clientId);
         });
     });
 };
 
-
-for (var i=0; i<1; i++) {
+for (var i=0; i<50; i++) {
     const clientId = 'client' + i;
     makeConnection(clientId);
 };
