@@ -19,8 +19,8 @@ function runJava(clientId, main, tarPath, timeLimitCompile, timeLimitExecution) 
 
     const className = main.split('.')[0];
 
-    const javacCmd = ['javac', '-cp', 'home', `home/${main}`];
-    const javaCmd = ['java', '-cp', 'home', className];
+    const javacCmd = ['javac', '-cp', 'home:junit/junit-4.12:junit/hamcrest-core-1.3', `home/${main}`];
+    const javaCmd = ['java', '-cp', 'home:junit/junit-4.12:junit/hamcrest-core-1.3', className];
 
     const sourceLocation = tarPath;
     const execution = dockerCommand(javacCmd, timeLimitCompile, dockerCommand(javaCmd, timeLimitExecution));
@@ -42,16 +42,22 @@ function createJContainer(clientId, javaSourceTar, callback) {
         const startOpts = {};
         container.start(startOpts, (err, data) => {
 
-            if (err) {callback(err, data); return}
+            if (err) {callback(err, data); return};
 
             const tarOpts = {path: 'home'};
             container.putArchive(javaSourceTar, tarOpts, (err, data) => {
 
-                if (err) {
-                    callback(err, data);
-                } else {
-                    callback(null, container)
-                }
+                if (err) {callback(err, data); return};
+
+                const tarOpts = {path: '/'};
+                container.putArchive('./junit/junit.tar', tarOpts, (err, data) => {
+
+                    if (err) {
+                        callback(err, data);
+                    } else {
+                        callback(null, container)
+                    }
+                });
             });
         });
     });
