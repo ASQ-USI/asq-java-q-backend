@@ -105,8 +105,8 @@ function waitCmdExit(container, exec, nextCommand, stream, commandTimeOut, previ
 
                 javaBox.emit('result', feedback);
 
-                container.kill({}, () => {});               // process is still running though, but it shouldn't matter
-                container.remove({v: true}, () => {});
+                container.kill({}, () =>
+                    container.remove({v: true}, () => {}));
 
 
             } else {
@@ -132,8 +132,8 @@ function waitCmdExit(container, exec, nextCommand, stream, commandTimeOut, previ
 
             javaBox.emit('result', feedback);
 
-            container.kill({}, () => {});
-            container.remove({v: true}, () => {});
+            container.kill({}, () =>
+                container.remove({v: true}, () => {}));
 
         } else { // command failed
 
@@ -148,8 +148,8 @@ function waitCmdExit(container, exec, nextCommand, stream, commandTimeOut, previ
 
             javaBox.emit('result', feedback);
 
-            container.kill({}, () => {});
-            container.remove({v: true}, () => {});
+            container.kill({}, () =>
+                container.remove({v: true}, () => {}));
         }
     };
 

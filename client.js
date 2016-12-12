@@ -4,6 +4,8 @@ const JsonSocket = require('json-socket');
 const port = 5016;
 const host = '127.0.0.1';
 
+const clientsNumber = parseInt(process.argv[2]) || 1; // reading the command line argument
+let clientsLeft = clientsNumber;
 
 function makeConnection(clientId) {
 
@@ -125,15 +127,19 @@ public class AllTests
         socket.sendMessage(message);
 
         socket.on('message', function(message) {
+
+            clientsLeft--;
+
             console.log(message);
             console.log(message.output);
             console.log(message.errorMessage);
             console.timeEnd(clientId);
+            console.log(`Clients left: ${clientsLeft}\n \n`);
         });
     });
 };
 
-for (var i=0; i<50; i++) {
+for (var i = 0; i < clientsNumber; i++) {
     const clientId = 'client' + i;
     makeConnection(clientId);
 };
