@@ -1,34 +1,53 @@
 const net = require('net');
+const JsonSocket = require('json-socket');
+
+
+// Object containing clients list and relative sockets
+const clients = {};
 
 // Server eventEmitter
 const server = net.createServer();
 
 server.on('connection', initSocket);
+server.on('result', sendResult);
 
 
 // Init newly created socket
-function initSocket(socket) {
+function initSocket(connection) {
 
-    function parseInputData(data) {
-        data = data.trim();
+    const socket = new JsonSocket(connection);
 
-        if (data === 'test docker') {
-            server.emit('testDocker', socket);
+    const parseMessage = (message) => {
+
+        const clientId = message.clientId;
+        const main = message.submission.main;
+        const files = message.submission.files;
+        const timeLimitCompile = message.timeLimitCompile;
+        const timeLimitExecution = message.timeLimitExecution;
+
+        if (!(clientId && main && files)) {
+            sendResult({});
         }
-        else if (data == 'test java') {
-            server.emit('testJava', socket);
-        }
-        else {
-            server.emit('runJava', socket, data);
-        }
+
+        clients[message.clientId] = socket;
+
+        server.emit('runJava', clientId, main, files);
+    };
+
+    socket.on('message', parseMessage);
+};
+
+function sendResult(feedback) {
+
+    const socket = clients[feedback.clientId];
+
+    try {
+        socket.sendEndMessage(feedback);
+    } catch (e) {
+        console.log('socket closed before sending result back');
     }
 
-    socket.setEncoding('utf8');
-
-    socket.on('data', parseInputData);
 }
-
-
 
 
 module.exports = server;

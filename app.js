@@ -1,35 +1,108 @@
-var tar = require('tar-fs');
-var fs = require('fs');
+const tar = require('tar-fs');
+const fs = require('fs');
 
-const PORT = 5000;
+const PORT = 5016;
 
 // Two main eventEmitters of the application
 const server = require('./server');
 const javaBox = require('./javaBox');
 
-// Test
-server.on('testDocker', (socket) => {
-    javaBox.emit('testDocker', socket);
-}).on('testJava', (socket) => {
-    javaBox.emit('testJava', socket);
-}).on('runJava', runSingleClass);
+
+server.on('runJava', runSingleClass);
+javaBox.on('result', giveFeedBack);
 
 
-function runSingleClass(socket, data) {
+function runSingleClass(clientId, main, files) {
 
-    console.log(data);
+    const dirPath = `./dockerFiles/${clientId}`;
+    const tarPath = `${dirPath}.tar`;
 
-    let dirPath = './dockerFiles/singleClass';
-    let tarPath = dirPath + '.tar';
-    let filePath = dirPath + '/Main.java';
+    const makeTarAndRun = () => {
 
-    fs.mkdir(dirPath, (err) => console.log('directory created'));
-    fs.createWriteStream(filePath).write(data);
+        tar.pack(dirPath).pipe(fs.createWriteStream(tarPath));
+        javaBox.emit('runJava', clientId, main, tarPath);
+    };
 
-    tar.pack(dirPath).pipe(fs.createWriteStream(tarPath));
+    const writeFiles = () => {
 
-    javaBox.emit('runJava', socket, tarPath);
+        fs.readdir(dirPath, (err, oldFiles) => {
+
+            let filesToDelete = oldFiles.length;
+            let filesToAdd = files.length;
+
+            const newFilesNames = [];
+
+            const tryTarAndRun = () => {
+
+                if ((filesToDelete === 0) && (filesToAdd === 0)) {
+                    makeTarAndRun();
+                }
+            };
+
+            const fileAdded = () => {
+
+                filesToAdd--;
+                tryTarAndRun();
+            };
+
+            const fileDeleted = () => {
+
+                filesToDelete--;
+                tryTarAndRun();
+            };
+
+            files.forEach((file) => {
+
+                const filePath = `${dirPath}/${file.name}`;
+                newFilesNames.push(file.name);
+
+                fs.createWriteStream(filePath).write(file.data, fileAdded);
+            });
+
+            oldFiles.forEach((oldFile) => {
+
+                if (newFilesNames.includes(oldFile)) {
+                    fileDeleted();
+                }
+                else {
+                    fs.unlink(`${dirPath}/${oldFile}`, fileDeleted);
+                }
+            });
+        });
+    };
+
+    const manageClientDir = () => {
+
+        fs.access(dirPath, (err) => {
+
+            if (err) {
+                fs.mkdir(dirPath, writeFiles);
+            } else {
+                writeFiles();
+            };
+        });
+    };
+
+    const manageDockerDir = () => {
+
+        fs.access('./dockerFiles/', (err) => {
+
+            if (err) {
+                fs.mkdir('./dockerFiles/', manageClientDir);
+            } else {
+                manageClientDir();
+            };
+        });
+    };
+
+    manageDockerDir();
 }
+
+function giveFeedBack(feedBack) {
+    feedBack['timeOut'] = false;
+    server.emit('result', feedBack);
+};
+
 
 server.listen(PORT);
 
