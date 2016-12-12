@@ -1,7 +1,7 @@
 # Compiled source #
 ###################
 *.com
-*.class
+#*.class
 *.dll
 *.exe
 *.o
@@ -22,7 +22,7 @@ dockerFiles/*
 *.iso
 #*.jar
 *.rar
-*.tar
+#*.tar
 
 
 # Hidden Files and Folders #
