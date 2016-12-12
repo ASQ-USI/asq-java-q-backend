@@ -64,3 +64,9 @@ $ docker kill $(docker ps -aq)
 ```
 $ docker rm -v $(docker ps -aq)
 ```
+
+### Client
+
+Client.js is a script done to test the server. 
+It accepts an integer as the command line argument (default 1) and tries to do the same number of requests.
+For each request it prints out the response and the time it took to receive it.
