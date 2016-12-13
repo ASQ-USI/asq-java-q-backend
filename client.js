@@ -117,8 +117,8 @@ public class AllTests
 }`
                 }
             ]},
-            timeLimitCompile : 10000,
-            timeLimitExecution : 10000
+            timeLimitCompile : 1000000,
+            timeLimitExecution : 1000000
 
         };
 
