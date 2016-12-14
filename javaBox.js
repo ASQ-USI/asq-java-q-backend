@@ -99,7 +99,7 @@ function waitCmdExit(container, exec, nextCommand, stream, commandTimeOut, previ
                     clientId: container.clientId,
                     passed: false,
                     output: '',
-                    errorMessage: "",
+                    errorMessage: "Reached maximum time limit",
                     timeOut: true
                 };
 
