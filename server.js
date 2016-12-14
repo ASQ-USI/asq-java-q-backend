@@ -22,8 +22,9 @@ function initSocket(connection) {
         const clientId = message.clientId;
         const main = message.submission.main;
         const files = message.submission.files;
-        const timeLimitCompile = message.timeLimitCompile;
-        const timeLimitExecution = message.timeLimitExecution;
+        const timeLimitCompile = message.compileTimeoutMs;
+        const timeLimitExecution = message.executionTimeoutMs;
+        const charactersMaxLength = message.charactersMaxLength;
 
         clients[message.clientId] = socket;
 
