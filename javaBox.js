@@ -121,10 +121,13 @@ function waitCmdExit(container, exec, nextCommand, stream, commandTimeOut, previ
 
         } else if (data.ExitCode === 0) { // command successful, it was the last command
 
+            const output = stream.read();
+            const outputStream = (output) ? output.toString() : '';
+
             const feedback = {
                 clientId: container.clientId,
                 passed: true,
-                output: stream.read().toString(),
+                output: outputStream,
                 errorMessage: '',
                 timeOut: false
 
@@ -137,11 +140,14 @@ function waitCmdExit(container, exec, nextCommand, stream, commandTimeOut, previ
 
         } else { // command failed
 
+            const error = stream.read();
+            const errorString = (error) ? error.toString() : '';
+
             const feedback = {
                 clientId: container.clientId,
                 passed: false,
                 output: '',
-                errorMessage: stream.read().toString(),
+                errorMessage: errorString,
                 timeOut: false
 
             };
