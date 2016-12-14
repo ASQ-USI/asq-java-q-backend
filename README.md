@@ -14,8 +14,40 @@ Otherwise you need to do ```$ docker pull openjdk:8u111-jdk``` to download the r
 ### Communication API
 
 
-Request :
+Request (containing junit files):
+```json
+{
+clientId : "1234",
+submission : 
+    {
+    main: '',
+    files: [
+        {
+            name: "class1.java",
+            data: "void hello(){}"},
+        {
+            name: "Main.java",
+            data: "void main(String[] args){}"
+        }]
+    },
+    tests: [
+        {
+            name: "test1.java",
+            data: "@Test public void foo(){}"
+        },
+        {
+            name: "test2.java",
+            data: "@Test public void bar(){ assert(1==2);}"
+         }
+    ],
+    timeLimitCompile : 2000,
+    timeLimitExecution : 1000
+}
 ```
+Note: if there ara files in `tests`, then `main` can be ommited as it is not needed.
+
+Request (simple java code without tests):
+```json
 {
 clientId : "1234",
 submission : 
@@ -30,19 +62,38 @@ submission :
             data: "void main(String[] args){}"
         }]
     },
-timeLimitCompile : 200,
-timeLimitExecution : 200
+    tests: [],
+    timeLimitCompile : 2000,
+    timeLimitExecution : 1000
+}
+```
+Note: `tests` field can be omitted.
+
+
+Response (if test files exist and client code compiled):
+
+```json
+{
+    clientId: String,
+    passed: Boolean, (True)
+    output: String,
+    errorMessage: String,
+    timeOut: Boolean,
+    totalNumberOfTests: Integer,
+    numberOfTestsPassed: Integer,
+    testsOutput: String (output of all failed tests)
 }
 ```
 
-Response:
-```
+Response (if test files don't exist or client did not compile):
+
+```json
 {
-clientId: String,
-passed: Boolean,
-output: String,
-errorMessage: String,
-timeOut: Boolean
+    clientId: String,
+    passed: Boolean, (`True` if compiled, `False` otherwise)
+    output: String,
+    errorMessage: String,
+    timeOut: Boolean
 }
 ```
 
