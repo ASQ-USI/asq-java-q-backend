@@ -11,16 +11,21 @@ const EXEC_WAIT_TIME_MS = 250;
 // JavaBox eventEmitter
 const javaBox = new EventEmitter();
 
+let _junit_ = false;
+
 javaBox.on('runJava', runJava);
+javaBox.on('runJunit', runJunit);
+
 
 
 // Run the Main.java inside the tar and outputs the result to the socket
 function runJava(clientId, main, tarPath, timeLimitCompile, timeLimitExecution) {
+    _junit_ = false;
 
     const className = main.split('.')[0];
 
-    const javacCmd = ['javac', '-cp', 'home:junit/junit-4.12:junit/hamcrest-core-1.3', `home/${main}`];
-    const javaCmd = ['java', '-cp', 'home:junit/junit-4.12:junit/hamcrest-core-1.3', className];
+    const javacCmd = ['javac', `home/${main}`];
+    const javaCmd = ['java', className];
 
     const sourceLocation = tarPath;
     const execution = dockerCommand(javacCmd, timeLimitCompile, dockerCommand(javaCmd, timeLimitExecution));
@@ -48,16 +53,29 @@ function createJContainer(clientId, javaSourceTar, callback) {
             container.putArchive(javaSourceTar, tarOpts, (err, data) => {
 
                 if (err) {callback(err, data); return};
+   
+                if (_junit_ == true){
 
-                const tarOpts = {path: '/'};
-                container.putArchive('./junit/junit.tar', tarOpts, (err, data) => {
+                    const tarOpts = {path: 'home'};
+                    container.putArchive('./archives/libs.tar', tarOpts, (err, data) => {
 
-                    if (err) {
-                        callback(err, data);
-                    } else {
-                        callback(null, container)
-                    }
-                });
+                        if (err) {
+                            callback(err, data);
+                        } else {
+                            callback(null, container)
+                        }
+                    });
+
+                    container.putArchive('./archives/TestRunner.java.tar', tarOpts, (err, data)=>{
+
+                        if (err) {
+                            callback(err, data);
+                        } else {
+                            callback(null, container)
+                        }
+                    });
+
+                }
             });
         });
     });
@@ -119,6 +137,33 @@ function waitCmdExit(container, exec, nextCommand, stream, commandTimeOut, previ
 
             nextCommand(null, container);
 
+
+
+        /* * * * 
+        * if test files exist (and passed is true):
+        *
+        * output: {
+        *
+        *   clientId,
+        *   passed: Boolean (false if compile/runtime errors true otherwise),
+        *   output: String,
+        *   errorMessage: String (empty if `passed` is true),
+        *   timeOut: Boolean,
+        *   totalNumberOfTests: Integer,
+        *   numberOfTestsPassed: Integer,
+        *   testsOutput: String (output of all failed tests)
+        * }
+        *
+        * otherwise:
+        *
+        * output: {
+        *
+        *   clientId,
+        *   passed: Boolean (false if compile/runtime errors true otherwise),
+        *   output: String,
+        *   errorMessage: String (empty if `passed` is false),
+        *   timeOut: Boolean
+        * * * */
         } else if (data.ExitCode === 0) { // command successful, it was the last command
 
             const output = stream.read();
@@ -126,12 +171,23 @@ function waitCmdExit(container, exec, nextCommand, stream, commandTimeOut, previ
 
             const feedback = {
                 clientId: container.clientId,
-                passed: true,
-                output: outputStream,
+                passed: false,
                 errorMessage: '',
                 timeOut: false
 
             };
+
+            if (_junit_ == true){
+
+                const parsed = parseOutput(outputStream);
+                feedback.output = parsed.output;
+                feedback.totalNumberOfTests = parsed.totalNumberOfTests;
+                feedback.numberOfTestsPassed = parsed.numberOfTestsPassed;
+                feedback.testsOutput = parsed.testsOutput;
+
+            }else{
+                feedback.output = outputStream;
+            }
 
             javaBox.emit('result', feedback);
 
@@ -162,5 +218,46 @@ function waitCmdExit(container, exec, nextCommand, stream, commandTimeOut, previ
     setTimeout(() => exec.inspect(checkExit), EXEC_WAIT_TIME_MS);
 };
 
+function runJunit(clientId, junitFileNames, tarPath, timeLimitCompile, timeLimitExecution) {
 
+    _junit_ = true;
+
+    let junitFiles = [];
+    junitFileNames.forEach((f)=>{
+        junitFiles.push( f.split('.')[0]);
+    })
+
+    const className = 'TestRunner';
+
+    const javacCmd = ['javac', '-cp', 'home:home/libs', '*.java'];
+    let javaCmd = ['java', '-cp', 'home:home/libs', className];
+
+    junitFiles.forEach((file)=>{
+        javaCmd.push(file);
+    })
+
+    const sourceLocation = tarPath;
+    const execution = dockerCommand(javacCmd, timeLimitCompile, dockerCommand(javaCmd, timeLimitExecution));
+
+    createJContainer(clientId, sourceLocation, execution);
+};
+
+function parseOutput(input){
+    const _INPUT_DELIMITER_ = '_!*^&_test-output';
+
+    let wholeOutput = {};
+
+    wholeOutput.normalOutput = input.split(_INPUT_DELIMITER_)[0];
+    
+    const testOutput = JSON.parse(input.split(_INPUT_DELIMITER_)[1]);
+    
+    if (testOutput.totalNumberOfTests)  wholeOutput.totalNumberOfTests  = testOutput.totalNumberOfTests;
+    if (testOutput.numberOfTestsPassed) wholeOutput.numberOfTestsPassed = testOutput.numberOfTestsPassed;
+    if (testOutput.testsOutput)         wholeOutput.testsOutput         = testOutput.testsOutput;
+
+    return wholeOutput;
+}
+
+
+}
 module.exports = javaBox;

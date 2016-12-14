@@ -29,7 +29,7 @@ function initSocket(connection) {
         clients[message.clientId] = socket;
 
 
-        if (!(clientId && main && files && timeLimitCompile && timeLimitExecution)){
+        if (!(clientId && files && timeLimitCompile && timeLimitExecution)){
             sendResult({clientId: clientId});
             return;
         }
@@ -40,8 +40,16 @@ function initSocket(connection) {
         }
 
 
+        if (message.tests && Array.isArray(message.tests) && message.tests !== []){ // run junit tests
 
-        server.emit('runJava', clientId, main, files, timeLimitCompile, timeLimitExecution);
+            server.emit('runJunit', clientId, message.tests, files, timeLimitCompile, timeLimitExecution);
+        
+        }else{      // run normal java code
+
+            if (!main) sendResult({clientId: clientId});
+
+            server.emit('runJava', clientId, main, files, timeLimitCompile, timeLimitExecution);
+        }
     };
 
     socket.on('message', parseMessage);
