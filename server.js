@@ -2,7 +2,8 @@ const net = require('net');
 const JsonSocket = require('json-socket');
 
 
-// Object containing clients list and relative sockets
+// Object containing clients list and relative information as such
+// {clientId: {socket: ..., charactersMaxLength: ...}, ...}
 const clients = {};
 
 // Server eventEmitter
@@ -26,10 +27,10 @@ function initSocket(connection) {
         const timeLimitExecution = message.executionTimeoutMs;
         const charactersMaxLength = message.charactersMaxLength;
 
-        clients[message.clientId] = socket;
+        clients[message.clientId] = {socket: socket, charactersMaxLength: charactersMaxLength};
 
 
-        if (!(clientId && main && files && timeLimitCompile && timeLimitExecution)){
+        if (!(clientId && main && files && timeLimitCompile && timeLimitExecution && charactersMaxLength)){
             sendResult({clientId: clientId});
             return;
         }
@@ -49,7 +50,16 @@ function initSocket(connection) {
 
 function sendResult(feedback) {
 
-    const socket = clients[feedback.clientId];
+    const client = clients[feedback.clientId];
+    const socket = client.socket;
+    const charactersMaxLength = client.charactersMaxLength;
+
+    if (feedback.output > charactersMaxLength) {
+        feedback.output = feedback.output.substring(0, charactersMaxLength);
+    }
+    if (feedback.errorMessage > charactersMaxLength) {
+        feedback.errorMessage = feedback.output.substring(0, charactersMaxLength);
+    }
 
     try {
         socket.sendEndMessage(feedback);
