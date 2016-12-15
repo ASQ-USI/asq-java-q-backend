@@ -1,5 +1,6 @@
 const EventEmitter = require('events');
 const Docker = require('dockerode');
+const concat = require('concat-stream');
 
 // Docker connection
 const docker = new Docker();
@@ -12,6 +13,7 @@ const EXEC_WAIT_TIME_MS = 250;
 const javaBox = new EventEmitter();
 
 javaBox.on('runJava', runJava);
+javaBox.on('runJunit', runJunit);
 
 
 // Run the Main.java inside the tar and outputs the result to the socket
@@ -25,12 +27,47 @@ function runJava(clientId, main, tarPath, timeLimitCompile, timeLimitExecution) 
     const sourceLocation = tarPath;
     const execution = dockerCommand(javacCmd, timeLimitCompile, dockerCommand(javaCmd, timeLimitExecution));
 
-    createJContainer(clientId, sourceLocation, execution);
+    createJContainer(clientId, sourceLocation, false, execution);
+};
+
+function runJunit(clientId, junitFileNames, tarPath, timeLimitCompile, timeLimitExecution) {
+
+    let junitFiles = [];
+    junitFileNames.forEach((f)=>{
+        junitFiles.push( f.name.split('.')[0]);
+    });
+
+    const className = 'TestRunner';
+
+    const javacCmd = ['javac', '-cp', 'home:libs/junit-4.12:libs/hamcrest-core-1.3:libs/json-simple-1.1.1'];
+    let javaCmd = ['java', '-cp', 'home:libs/junit-4.12:libs/hamcrest-core-1.3:libs/json-simple-1.1.1', className];
+
+    junitFiles.forEach((file)=>{
+        javacCmd.push('home/' + file + '.java');
+        javaCmd.push(file);
+    });
+    javacCmd.push('home/' + className + '.java');
+
+
+    const sourceLocation = tarPath;
+    const execution = dockerCommand(javacCmd, timeLimitCompile, dockerCommand(javaCmd, timeLimitExecution));
+
+    createJContainer(clientId, sourceLocation, true, execution);
 };
 
 
 // Creates and starts a container with bash, JDK SE and more
-function createJContainer(clientId, javaSourceTar, callback) {
+function createJContainer(clientId, javaSourceTar, isJunit, callback) {
+
+    let copyToCall = 3;
+
+    const tryCallback = (container) => {
+
+        if (copyToCall === 0) {
+
+            callback(null, container);
+        }
+    };
 
     const createOpts = {Image: 'openjdk:8u111-jdk', Tty: true, Cmd: ['/bin/bash']};
     docker.createContainer(createOpts, (err, container) => {
@@ -44,32 +81,31 @@ function createJContainer(clientId, javaSourceTar, callback) {
 
             if (err) {callback(err, data); return};
 
-            const tarOpts = {path: 'home'};
-            container.putArchive(javaSourceTar, tarOpts, (err, data) => {
+            if (isJunit) {
 
-                if (err) {callback(err, data); return};
+                const tarOptsRunner = {path: 'home'};
+                container.putArchive('./archives/TestRunner.java.tar', tarOptsRunner, (err, data) => {
+                    copyToCall--;
+                    if (err) callback(err, data);
+                    else tryCallback(container);
 
-                if (_junit_ == true){
+                });
 
-                    const tarOpts = {path: '/'};
-                    container.putArchive('./archives/libs.tar', tarOpts, (err, data) => {
+                const tarOptsLibs = {path: '/'};
+                container.putArchive('./archives/libs.tar', tarOptsLibs, (err, data) => {
+                    copyToCall--;
+                    if (err) callback(err, data);
+                    else tryCallback(container);
+                });
+            } else {
+                copyCalled = 1;
+            }
 
-                        if (err) {
-                            callback(err, data);
-                        } else {
-                            const tarOpts = {path: 'home'};
-                            container.putArchive('./archives/TestRunner.java.tar', tarOpts, (err, data)=>{
-
-                                if (err) {
-                                    callback(err, data);
-                                } else {
-                                    callback(null, container)
-                                }
-                            });
-                        }
-                    });
-
-                }
+            const tarOptsSource = {path: 'home'};
+            container.putArchive(javaSourceTar, tarOptsSource, (err, data) => {
+                copyToCall--;
+                if (err) callback(err, data);
+                else tryCallback(container);
             });
         });
     });
@@ -126,7 +162,7 @@ function waitCmdExit(container, exec, nextCommand, streamManager, commandTimeOut
 
     const checkExit = (err, data) => {
 
-        if (data.Running) { // command is still running, check lateror send time out
+        if (data.Running) { // command is still running, check later or send time out
 
             timeSpent += EXEC_WAIT_TIME_MS;                             // count time spent
 
@@ -171,6 +207,7 @@ function waitCmdExit(container, exec, nextCommand, streamManager, commandTimeOut
         *   errorMessage: String (empty if `passed` is false),
         *   timeOut: Boolean
         * * * */
+
         } else if (data.ExitCode === 0) { // command successful, it was the last command
 
             feedbackAndClose(container, streamManager, true, false)
@@ -199,17 +236,11 @@ function feedbackAndClose(container, streamManager, passed, timeOut) {
 
     };
 
-    if ((_junit_ == true) && (passed)) {
-
-        const parsed = parseOutput(feedback.output);
-        feedback.output = parsed.output;
-        feedback.totalNumberOfTests = parsed.totalNumberOfTests;
-        feedback.numberOfTestsPassed = parsed.numberOfTestsPassed;
-        feedback.testsOutput = parsed.testsOutput;
-
-    } else {
-        feedback.output = outputStream;
-    }
+    const parsed = parseOutput(feedback.output);
+    feedback.output = parsed.normalOutput;
+    feedback.totalNumberOfTests = parsed.totalNumberOfTests;
+    feedback.numberOfTestsPassed = parsed.numberOfTestsPassed;
+    feedback.testsOutput = parsed.testsOutput;
 
     javaBox.emit('result', feedback);
 
@@ -217,43 +248,18 @@ function feedbackAndClose(container, streamManager, passed, timeOut) {
         container.remove({v: true}, () => {}));
 }
 
-function runJunit(clientId, junitFileNames, tarPath, timeLimitCompile, timeLimitExecution) {
-
-    _junit_ = true;
-
-    let junitFiles = [];
-    junitFileNames.forEach((f)=>{
-        junitFiles.push( f.name.split('.')[0]);
-    })
-
-    const className = 'TestRunner';
-
-    const javacCmd = ['javac', '-cp', 'home:libs/junit-4.12:libs/hamcrest-core-1.3:libs/json-simple-1.1.1'];
-    let javaCmd = ['java', '-cp', 'home:libs/junit-4.12:libs/hamcrest-core-1.3:libs/json-simple-1.1.1', className];
-
-    junitFiles.forEach((file)=>{
-        javacCmd.push('home/' + file + '.java')
-        javaCmd.push(file);
-    })
-    javacCmd.push('home/' + className + '.java')
-
-
-    const sourceLocation = tarPath;
-    const execution = dockerCommand(javacCmd, timeLimitCompile, dockerCommand(javaCmd, timeLimitExecution));
-
-    createJContainer(clientId, sourceLocation, execution);
-};
-
 function parseOutput(input){
+
     const _INPUT_DELIMITER_ = '_!*^&_test-output';
 
-    let wholeOutput = {};
+    const wholeOutput = {};
 
     wholeOutput.normalOutput = input.split(_INPUT_DELIMITER_)[0];
 
-    try{
+    try {
         const testOutput = JSON.parse(input.split(_INPUT_DELIMITER_)[1]);
-    }catch(err){
+
+    } catch(err) {
         console.log(err);
         console.log('INPUT', input);
     }
