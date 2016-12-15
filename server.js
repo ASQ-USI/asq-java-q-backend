@@ -2,7 +2,8 @@ const net = require('net');
 const JsonSocket = require('json-socket');
 
 
-// Object containing clients list and relative sockets
+// Object containing clients list and relative information as such
+// {clientId: {socket: ..., charactersMaxLength: ...}, ...}
 const clients = {};
 
 // Server eventEmitter
@@ -26,38 +27,49 @@ function initSocket(connection) {
         const timeLimitExecution = message.executionTimeoutMs;
         const charactersMaxLength = message.charactersMaxLength;
 
-        clients[message.clientId] = socket;
+        clients[message.clientId] = {socket: socket, charactersMaxLength: charactersMaxLength};
 
 
-        if (!(clientId && files && timeLimitCompile && timeLimitExecution)){
+        if (!(clientId && files && timeLimitCompile && timeLimitExecution && charactersMaxLength)) {
             sendResult({clientId: clientId});
             return;
         }
 
-        if (!(timeLimitCompile > 0 && timeLimitExecution > 0)){             // illogical values for timeout
+        if (!(timeLimitCompile > 0 && timeLimitExecution > 0)) {             // illogical values for timeout
             sendResult({clientId: clientId});
             return;
         }
 
 
-        if (message.submission.tests && Array.isArray(message.submission.tests) && message.submission.tests !== []){ // run junit tests
+        if (message.submission.tests && Array.isArray(message.submission.tests) && message.submission.tests !== []) { // run junit tests
 
             server.emit('runJunit', clientId, message.submission.tests, files, timeLimitCompile, timeLimitExecution);
-        
-        }else{      // run normal java code
+
+        } else {      // run normal java code
 
             if (!main) sendResult({clientId: clientId});
 
             server.emit('runJava', clientId, main, files, timeLimitCompile, timeLimitExecution);
+
         }
-    };
+    }
 
     socket.on('message', parseMessage);
 };
 
 function sendResult(feedback) {
 
-    const socket = clients[feedback.clientId];
+    const client = clients[feedback.clientId];
+    const socket = client.socket;
+    const charactersMaxLength = client.charactersMaxLength;
+
+    if (feedback.output.length > charactersMaxLength) {
+        console.log('trunkating');
+        feedback.output = feedback.output.substring(0, charactersMaxLength);
+    }
+    if (feedback.errorMessage.length > charactersMaxLength) {
+        feedback.errorMessage = feedback.output.substring(0, charactersMaxLength);
+    }
 
     try {
         socket.sendEndMessage(feedback);

@@ -11,21 +11,16 @@ const EXEC_WAIT_TIME_MS = 250;
 // JavaBox eventEmitter
 const javaBox = new EventEmitter();
 
-let _junit_ = false;
-
 javaBox.on('runJava', runJava);
-javaBox.on('runJunit', runJunit);
-
 
 
 // Run the Main.java inside the tar and outputs the result to the socket
 function runJava(clientId, main, tarPath, timeLimitCompile, timeLimitExecution) {
-    _junit_ = false;
 
     const className = main.split('.')[0];
 
-    const javacCmd = ['javac', 'home/' + main];
-    const javaCmd = ['java', className];
+    const javacCmd = ['javac', '-cp', 'home:junit/junit-4.12:junit/hamcrest-core-1.3', `home/${main}`];
+    const javaCmd = ['java', '-cp', 'home:junit/junit-4.12:junit/hamcrest-core-1.3', className];
 
     const sourceLocation = tarPath;
     const execution = dockerCommand(javacCmd, timeLimitCompile, dockerCommand(javaCmd, timeLimitExecution));
@@ -53,7 +48,7 @@ function createJContainer(clientId, javaSourceTar, callback) {
             container.putArchive(javaSourceTar, tarOpts, (err, data) => {
 
                 if (err) {callback(err, data); return};
-   
+
                 if (_junit_ == true){
 
                     const tarOpts = {path: '/'};
@@ -92,7 +87,32 @@ function dockerCommand(command, commandTimeLimit, nextCommand) {
     const execution = (err, container) => {
 
         if (!err) container.exec(opts, (err, exec) => {
-            exec.start((err, stream) => waitCmdExit(container, exec, nextCommand, stream, commandTimeLimit));
+            exec.start((err, stream) => {
+
+                let stdOut = '';
+                let stdErr = '';
+                const stdOutStream = concat({}, (data) => {
+                    stdOut += data;
+                });
+                const stdErrStream = concat({}, (data) => {
+                    stdErr += data;
+                });
+
+                container.modem.demuxStream(stream, stdOutStream, stdErrStream);
+
+
+                const streamManager = {
+
+                    readOut: () => {return stdOut},
+                    readErr: () => {return stdErr},
+                    endStream: () => {
+                        stdOutStream.end();
+                        stdErrStream.end();
+                    }
+                };
+
+                waitCmdExit(container, exec, nextCommand, streamManager, commandTimeLimit);
+            });
         });
     };
 
@@ -100,7 +120,7 @@ function dockerCommand(command, commandTimeLimit, nextCommand) {
 };
 
 // Ensures that the exec process is terminated and fires the next command
-function waitCmdExit(container, exec, nextCommand, stream, commandTimeOut, previousTime){
+function waitCmdExit(container, exec, nextCommand, streamManager, commandTimeOut, previousTime){
 
     let timeSpent = previousTime || 0;
 
@@ -112,23 +132,11 @@ function waitCmdExit(container, exec, nextCommand, stream, commandTimeOut, previ
 
             if (timeSpent >= commandTimeOut){                           // time period expired
 
-                const feedback = {
-                    clientId: container.clientId,
-                    passed: false,
-                    output: '',
-                    errorMessage: "Reached maximum time limit",
-                    timeOut: true
-                };
-
-                javaBox.emit('result', feedback);
-
-                container.kill({}, () =>
-                    container.remove({v: true}, () => {}));
-
+                feedbackAndClose(container, streamManager, false, true);
 
             } else {
 
-            waitCmdExit(container, exec, nextCommand, stream, commandTimeOut, timeSpent);
+            waitCmdExit(container, exec, nextCommand, streamManager, commandTimeOut, timeSpent);
 
             }
 
@@ -138,7 +146,7 @@ function waitCmdExit(container, exec, nextCommand, stream, commandTimeOut, previ
 
 
 
-        /* * * * 
+        /* * * *
         * if test files exist (and passed is true):
         *
         * output: {
@@ -165,57 +173,49 @@ function waitCmdExit(container, exec, nextCommand, stream, commandTimeOut, previ
         * * * */
         } else if (data.ExitCode === 0) { // command successful, it was the last command
 
-            const output = stream.read();
-            const outputStream = (output) ? output.toString() : '';
-
-            const feedback = {
-                clientId: container.clientId,
-                passed: false,
-                errorMessage: '',
-                timeOut: false
-
-            };
-
-            if (_junit_ == true){
-
-                const parsed = parseOutput(outputStream);
-                feedback.output = parsed.output;
-                feedback.totalNumberOfTests = parsed.totalNumberOfTests;
-                feedback.numberOfTestsPassed = parsed.numberOfTestsPassed;
-                feedback.testsOutput = parsed.testsOutput;
-
-            }else{
-                feedback.output = outputStream;
-            }
-
-            javaBox.emit('result', feedback);
-
-            container.kill({}, () =>
-                container.remove({v: true}, () => {}));
+            feedbackAndClose(container, streamManager, true, false)
 
         } else { // command failed
 
-            const error = stream.read();
-            const errorString = (error) ? error.toString() : '';
-
-            const feedback = {
-                clientId: container.clientId,
-                passed: false,
-                output: '',
-                errorMessage: errorString,
-                timeOut: false
-
-            };
-
-            javaBox.emit('result', feedback);
-
-            container.kill({}, () =>
-                container.remove({v: true}, () => {}));
+            feedbackAndClose(container, streamManager, false, false);
         }
     };
 
     setTimeout(() => exec.inspect(checkExit), EXEC_WAIT_TIME_MS);
 };
+
+
+// Sends back the feedback and closes the container
+function feedbackAndClose(container, streamManager, passed, timeOut) {
+
+    streamManager.endStream();
+
+    const feedback = {
+        clientId: container.clientId,
+        passed: passed,
+        output: (!timeOut) ? streamManager.readOut() : '',
+        errorMessage: (!timeOut) ? streamManager.readErr() : "Reached maximum time limit",
+        timeOut: timeOut
+
+    };
+
+    if ((_junit_ == true) && (passed)) {
+
+        const parsed = parseOutput(feedback.output);
+        feedback.output = parsed.output;
+        feedback.totalNumberOfTests = parsed.totalNumberOfTests;
+        feedback.numberOfTestsPassed = parsed.numberOfTestsPassed;
+        feedback.testsOutput = parsed.testsOutput;
+
+    } else {
+        feedback.output = outputStream;
+    }
+
+    javaBox.emit('result', feedback);
+
+    container.kill({}, () =>
+        container.remove({v: true}, () => {}));
+}
 
 function runJunit(clientId, junitFileNames, tarPath, timeLimitCompile, timeLimitExecution) {
 
@@ -250,14 +250,14 @@ function parseOutput(input){
     let wholeOutput = {};
 
     wholeOutput.normalOutput = input.split(_INPUT_DELIMITER_)[0];
-    
+
     try{
         const testOutput = JSON.parse(input.split(_INPUT_DELIMITER_)[1]);
     }catch(err){
         console.log(err);
         console.log('INPUT', input);
     }
-    
+
     if (testOutput.totalNumberOfTests)  wholeOutput.totalNumberOfTests  = testOutput.totalNumberOfTests;
     if (testOutput.numberOfTestsPassed) wholeOutput.numberOfTestsPassed = testOutput.numberOfTestsPassed;
     if (testOutput.testsOutput)         wholeOutput.testsOutput         = testOutput.testsOutput;
