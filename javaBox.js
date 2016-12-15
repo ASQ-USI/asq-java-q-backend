@@ -262,8 +262,7 @@ function parseOutput(input){
          testOutput = JSON.parse(input.split(_INPUT_DELIMITER_)[1]);
 
     } catch(err) {
-        console.log(err);
-        console.log('INPUT', input);
+        console.log('no junit');
     }
 
     if (testOutput){
