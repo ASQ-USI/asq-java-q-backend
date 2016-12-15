@@ -41,7 +41,7 @@ function initSocket(connection) {
         }
 
 
-        if (message.submission.tests && Array.isArray(message.submission.tests) && message.submission.tests !== []) { // run junit tests
+        if (message.submission.tests && Array.isArray(message.submission.tests) && message.submission.tests.length > 0) { // run junit tests
 
             server.emit('runJunit', clientId, message.submission.tests, files, timeLimitCompile, timeLimitExecution);
 
