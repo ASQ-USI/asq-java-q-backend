@@ -259,5 +259,4 @@ function parseOutput(input){
 }
 
 
-}
 module.exports = javaBox;
