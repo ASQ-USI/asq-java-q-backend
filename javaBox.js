@@ -1,5 +1,6 @@
 const EventEmitter = require('events');
 const Docker = require('dockerode');
+const concat = require('concat-stream');
 
 // Docker connection
 const docker = new Docker();
@@ -75,7 +76,32 @@ function dockerCommand(command, commandTimeLimit, nextCommand) {
     const execution = (err, container) => {
 
         if (!err) container.exec(opts, (err, exec) => {
-            exec.start((err, stream) => waitCmdExit(container, exec, nextCommand, stream, commandTimeLimit));
+            exec.start((err, stream) => {
+
+                let stdOut = '';
+                let stdErr = '';
+                const stdOutStream = concat({}, (data) => {
+                    stdOut += data;
+                });
+                const stdErrStream = concat({}, (data) => {
+                    stdErr += data;
+                });
+
+                container.modem.demuxStream(stream, stdOutStream, stdErrStream);
+
+
+                const streamManager = {
+
+                    readOut: () => {return stdOut},
+                    readErr: () => {return stdErr},
+                    endStream: () => {
+                        stdOutStream.end();
+                        stdErrStream.end();
+                    }
+                };
+
+                waitCmdExit(container, exec, nextCommand, streamManager, commandTimeLimit);
+            });
         });
     };
 
@@ -83,7 +109,7 @@ function dockerCommand(command, commandTimeLimit, nextCommand) {
 };
 
 // Ensures that the exec process is terminated and fires the next command
-function waitCmdExit(container, exec, nextCommand, stream, commandTimeOut, previousTime){
+function waitCmdExit(container, exec, nextCommand, streamManager, commandTimeOut, previousTime){
 
     let timeSpent = previousTime || 0;
 
@@ -95,23 +121,11 @@ function waitCmdExit(container, exec, nextCommand, stream, commandTimeOut, previ
 
             if (timeSpent >= commandTimeOut){                           // time period expired
 
-                const feedback = {
-                    clientId: container.clientId,
-                    passed: false,
-                    output: '',
-                    errorMessage: "Reached maximum time limit",
-                    timeOut: true
-                };
-
-                javaBox.emit('result', feedback);
-
-                container.kill({}, () =>
-                    container.remove({v: true}, () => {}));
-
+                feedbackAndClose(container, streamManager, false, true);
 
             } else {
 
-            waitCmdExit(container, exec, nextCommand, stream, commandTimeOut, timeSpent);
+            waitCmdExit(container, exec, nextCommand, streamManager, commandTimeOut, timeSpent);
 
             }
 
@@ -121,46 +135,37 @@ function waitCmdExit(container, exec, nextCommand, stream, commandTimeOut, previ
 
         } else if (data.ExitCode === 0) { // command successful, it was the last command
 
-            const output = stream.read();
-            const outputStream = (output) ? output.toString() : '';
-
-            const feedback = {
-                clientId: container.clientId,
-                passed: true,
-                output: outputStream,
-                errorMessage: '',
-                timeOut: false
-
-            };
-
-            javaBox.emit('result', feedback);
-
-            container.kill({}, () =>
-                container.remove({v: true}, () => {}));
+            feedbackAndClose(container, streamManager, true, false)
 
         } else { // command failed
 
-            const error = stream.read();
-            const errorString = (error) ? error.toString() : '';
-
-            const feedback = {
-                clientId: container.clientId,
-                passed: false,
-                output: '',
-                errorMessage: errorString,
-                timeOut: false
-
-            };
-
-            javaBox.emit('result', feedback);
-
-            container.kill({}, () =>
-                container.remove({v: true}, () => {}));
+            feedbackAndClose(container, streamManager, false, false);
         }
     };
 
     setTimeout(() => exec.inspect(checkExit), EXEC_WAIT_TIME_MS);
 };
+
+
+// Sends back the feedback and closes the container
+function feedbackAndClose(container, streamManager, passed, timeOut) {
+
+    streamManager.endStream();
+
+    const feedback = {
+        clientId: container.clientId,
+        passed: passed,
+        output: (!timeOut) ? streamManager.readOut() : '',
+        errorMessage: (!timeOut) ? streamManager.readErr() : "Reached maximum time limit",
+        timeOut: timeOut
+
+    };
+
+    javaBox.emit('result', feedback);
+
+    container.kill({}, () =>
+        container.remove({v: true}, () => {}));
+}
 
 
 module.exports = javaBox;
