@@ -21,8 +21,8 @@ function runJava(clientId, main, tarPath, timeLimitCompile, timeLimitExecution) 
 
     const className = main.split('.')[0];
 
-    const javacCmd = ['javac', '-cp', 'home:junit/junit-4.12:junit/hamcrest-core-1.3', 'home/' + main];
-    const javaCmd = ['java', '-cp', 'home:junit/junit-4.12:junit/hamcrest-core-1.3', className];
+    const javacCmd = ['javac', 'home/' + main];
+    const javaCmd = ['java', className];
 
     const sourceLocation = tarPath;
     const execution = dockerCommand(javacCmd, timeLimitCompile, dockerCommand(javaCmd, timeLimitExecution));
@@ -46,7 +46,7 @@ function runJunit(clientId, junitFileNames, tarPath, timeLimitCompile, timeLimit
         javacCmd.push('home/' + file + '.java');
         javaCmd.push(file);
     });
-    javacCmd.push('home/' + className + '.java');
+    //javacCmd.push('home/' + className + '.java'); // already compiled
 
 
     const sourceLocation = tarPath;
@@ -84,7 +84,7 @@ function createJContainer(clientId, javaSourceTar, isJunit, callback) {
             if (isJunit) {
 
                 const tarOptsRunner = {path: 'home'};
-                container.putArchive('./archives/TestRunner.java.tar', tarOptsRunner, (err, data) => {
+                container.putArchive('./archives/TestRunner.class.tar', tarOptsRunner, (err, data) => {
                     copyToCall--;
                     if (err) callback(err, data);
                     else tryCallback(container);
@@ -254,13 +254,16 @@ function parseOutput(input){
 
     const wholeOutput = {};
 
-    wholeOutput.normalOutput = input.split(_INPUT_DELIMITER_)[0];
+    let inputParts = input.split(_INPUT_DELIMITER_);
+    const lastPartIndex = inputParts.length - 1;
+
+    wholeOutput.normalOutput = inputParts.splice(lastPartIndex, 1);
 
     let testOutput = null;
-
     try {
-         testOutput = JSON.parse(input.split(_INPUT_DELIMITER_)[1]);
-
+        if (lastPartsIndex > 1){
+            testOutput = JSON.parse(inputParts[lastPartIndex]);
+        }
     } catch(err) {
         console.log('no junit');
     }
