@@ -21,7 +21,7 @@ function runJava(clientId, main, tarPath, timeLimitCompile, timeLimitExecution) 
 
     const className = main.split('.')[0];
 
-    const javacCmd = ['javac', '-cp', 'home:junit/junit-4.12:junit/hamcrest-core-1.3', `home/${main}`];
+    const javacCmd = ['javac', '-cp', 'home:junit/junit-4.12:junit/hamcrest-core-1.3', 'home/' + main];
     const javaCmd = ['java', '-cp', 'home:junit/junit-4.12:junit/hamcrest-core-1.3', className];
 
     const sourceLocation = tarPath;
@@ -98,7 +98,7 @@ function createJContainer(clientId, javaSourceTar, isJunit, callback) {
                     else tryCallback(container);
                 });
             } else {
-                copyCalled = 1;
+                copyToCall = 1;
             }
 
             const tarOptsSource = {path: 'home'};
@@ -256,17 +256,21 @@ function parseOutput(input){
 
     wholeOutput.normalOutput = input.split(_INPUT_DELIMITER_)[0];
 
+    let testOutput = null;
+
     try {
-        const testOutput = JSON.parse(input.split(_INPUT_DELIMITER_)[1]);
+         testOutput = JSON.parse(input.split(_INPUT_DELIMITER_)[1]);
 
     } catch(err) {
         console.log(err);
         console.log('INPUT', input);
     }
 
-    if (testOutput.totalNumberOfTests)  wholeOutput.totalNumberOfTests  = testOutput.totalNumberOfTests;
-    if (testOutput.numberOfTestsPassed) wholeOutput.numberOfTestsPassed = testOutput.numberOfTestsPassed;
-    if (testOutput.testsOutput)         wholeOutput.testsOutput         = testOutput.testsOutput;
+    if (testOutput){
+        wholeOutput.totalNumberOfTests  = testOutput.totalNumberOfTests;
+        wholeOutput.numberOfTestsPassed = testOutput.numberOfTestsPassed;
+        wholeOutput.testsOutput         = testOutput.testsOutput;
+    }
 
     return wholeOutput;
 }

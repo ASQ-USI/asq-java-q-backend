@@ -68,7 +68,7 @@ function sendResult(feedback) {
         feedback.output = feedback.output.substring(0, charactersMaxLength);
     }
     if (feedback.errorMessage.length > charactersMaxLength) {
-        feedback.errorMessage = feedback.output.substring(0, charactersMaxLength);
+        feedback.errorMessage = feedback.errorMessage.substring(0, charactersMaxLength);
     }
 
     try {
