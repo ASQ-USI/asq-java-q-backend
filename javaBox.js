@@ -24,7 +24,7 @@ function runJava(clientId, main, tarPath, timeLimitCompile, timeLimitExecution) 
 
     const className = main.split('.')[0];
 
-    const javacCmd = ['javac', `home/${main}`];
+    const javacCmd = ['javac', 'home/' + main];
     const javaCmd = ['java', className];
 
     const sourceLocation = tarPath;
@@ -56,22 +56,21 @@ function createJContainer(clientId, javaSourceTar, callback) {
    
                 if (_junit_ == true){
 
-                    const tarOpts = {path: 'home'};
+                    const tarOpts = {path: '/'};
                     container.putArchive('./archives/libs.tar', tarOpts, (err, data) => {
 
                         if (err) {
                             callback(err, data);
                         } else {
-                            callback(null, container)
-                        }
-                    });
+                            const tarOpts = {path: 'home'};
+                            container.putArchive('./archives/TestRunner.java.tar', tarOpts, (err, data)=>{
 
-                    container.putArchive('./archives/TestRunner.java.tar', tarOpts, (err, data)=>{
-
-                        if (err) {
-                            callback(err, data);
-                        } else {
-                            callback(null, container)
+                                if (err) {
+                                    callback(err, data);
+                                } else {
+                                    callback(null, container)
+                                }
+                            });
                         }
                     });
 
@@ -224,17 +223,20 @@ function runJunit(clientId, junitFileNames, tarPath, timeLimitCompile, timeLimit
 
     let junitFiles = [];
     junitFileNames.forEach((f)=>{
-        junitFiles.push( f.split('.')[0]);
+        junitFiles.push( f.name.split('.')[0]);
     })
 
     const className = 'TestRunner';
 
-    const javacCmd = ['javac', '-cp', 'home:home/libs', '*.java'];
-    let javaCmd = ['java', '-cp', 'home:home/libs', className];
+    const javacCmd = ['javac', '-cp', 'home:libs/junit-4.12:libs/hamcrest-core-1.3:libs/json-simple-1.1.1'];
+    let javaCmd = ['java', '-cp', 'home:libs/junit-4.12:libs/hamcrest-core-1.3:libs/json-simple-1.1.1', className];
 
     junitFiles.forEach((file)=>{
+        javacCmd.push('home/' + file + '.java')
         javaCmd.push(file);
     })
+    javacCmd.push('home/' + className + '.java')
+
 
     const sourceLocation = tarPath;
     const execution = dockerCommand(javacCmd, timeLimitCompile, dockerCommand(javaCmd, timeLimitExecution));
@@ -249,7 +251,12 @@ function parseOutput(input){
 
     wholeOutput.normalOutput = input.split(_INPUT_DELIMITER_)[0];
     
-    const testOutput = JSON.parse(input.split(_INPUT_DELIMITER_)[1]);
+    try{
+        const testOutput = JSON.parse(input.split(_INPUT_DELIMITER_)[1]);
+    }catch(err){
+        console.log(err);
+        console.log('INPUT', input);
+    }
     
     if (testOutput.totalNumberOfTests)  wholeOutput.totalNumberOfTests  = testOutput.totalNumberOfTests;
     if (testOutput.numberOfTestsPassed) wholeOutput.numberOfTestsPassed = testOutput.numberOfTestsPassed;
