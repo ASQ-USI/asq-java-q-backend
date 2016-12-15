@@ -223,13 +223,13 @@ function waitCmdExit(container, exec, nextCommand, streamManager, commandTimeOut
 
 
 // Sends back the feedback and closes the container
-function feedbackAndClose(container, streamManager, compile, timeOut) {
+function feedbackAndClose(container, streamManager, passed, timeOut) {
 
     streamManager.endStream();
 
     const feedback = {
         clientId: container.clientId,
-        compile: compile,
+        passed: passed,
         output: (!timeOut) ? streamManager.readOut() : '',
         errorMessage: (!timeOut) ? streamManager.readErr() : "Reached maximum time limit",
         timeOut: timeOut
