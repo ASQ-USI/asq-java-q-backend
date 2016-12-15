@@ -20,9 +20,9 @@ dockerFiles/*
 *.dmg
 *.gz
 *.iso
-*.jar
+#*.jar
 *.rar
-*.tar
+#*.tar
 
 
 # Hidden Files and Folders #
