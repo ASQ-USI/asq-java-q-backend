@@ -40,9 +40,9 @@ function initSocket(connection) {
         }
 
 
-        if (message.tests && Array.isArray(message.tests) && message.tests !== []){ // run junit tests
+        if (message.submission.tests && Array.isArray(message.submission.tests) && message.submission.tests !== []){ // run junit tests
 
-            server.emit('runJunit', clientId, message.tests, files, timeLimitCompile, timeLimitExecution);
+            server.emit('runJunit', clientId, message.submission.tests, files, timeLimitCompile, timeLimitExecution);
         
         }else{      // run normal java code
 
