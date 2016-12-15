@@ -54,10 +54,11 @@ function sendResult(feedback) {
     const socket = client.socket;
     const charactersMaxLength = client.charactersMaxLength;
 
-    if (feedback.output > charactersMaxLength) {
+    if (feedback.output.length > charactersMaxLength) {
+        console.log('trunkating');
         feedback.output = feedback.output.substring(0, charactersMaxLength);
     }
-    if (feedback.errorMessage > charactersMaxLength) {
+    if (feedback.errorMessage.length > charactersMaxLength) {
         feedback.errorMessage = feedback.output.substring(0, charactersMaxLength);
     }
 
