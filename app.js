@@ -8,12 +8,12 @@ const server = require('./server');
 const javaBox = require('./javaBox');
 
 
-server.on('runJunit', runJunit_2);
-server.on('runJava', runJava_2);
+server.on('runJunit', runJunit);
+server.on('runJava', runJava);
 javaBox.on('result', giveFeedBack);
 
 
-function runJava_2(clientId, main, files, timeLimitCompile, timeLimitExecution) {
+function runJava(clientId, main, files, timeLimitCompile, timeLimitExecution) {
 
     let filesToAdd = files.length;
 
@@ -34,7 +34,7 @@ function runJava_2(clientId, main, files, timeLimitCompile, timeLimitExecution) 
     });
 }
 
-function runJunit_2(clientId, tests, files, timeLimitCompile, timeLimitExecution) {
+function runJunit(clientId, tests, files, timeLimitCompile, timeLimitExecution) {
 
     let filesToAdd = files.length + tests.length;
 

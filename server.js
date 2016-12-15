@@ -52,7 +52,7 @@ function initSocket(connection) {
             server.emit('runJava', clientId, main, files, timeLimitCompile, timeLimitExecution);
 
         }
-    }
+    };
 
     socket.on('message', parseMessage);
 };
@@ -64,11 +64,10 @@ function sendResult(feedback) {
     const charactersMaxLength = client.charactersMaxLength;
 
     if (feedback.output.length > charactersMaxLength) {
-        console.log('trunkating');
         feedback.output = feedback.output.substring(0, charactersMaxLength);
     }
     if (feedback.errorMessage.length > charactersMaxLength) {
-        feedback.errorMessage = feedback.errorMessage.substring(0, charactersMaxLength);
+        feedback.errorMessage = feedback.errorMessage.substring(5, charactersMaxLength);
     }
 
     try {

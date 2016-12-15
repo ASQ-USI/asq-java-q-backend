@@ -117,9 +117,9 @@ public class AllTests
 }`
                 }
             ]},
-            compileTimeoutMs : 1000000,
-            executionTimeoutMs : 1000000,
-            charactersMaxLength: 5
+            compileTimeoutMs : 600000,
+            executionTimeoutMs : 600000,
+            charactersMaxLength: 10000
 
         };
 
