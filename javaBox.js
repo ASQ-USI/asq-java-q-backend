@@ -17,7 +17,7 @@ javaBox.on('runJunit', runJunit);
 
 
 // Run the Main.java inside the tar and outputs the result to the socket
-function runJava(clientId, main, tarPath, timeLimitCompile, timeLimitExecution) {
+function runJava(messageId, main, tarPath, timeLimitCompile, timeLimitExecution) {
 
     const className = main.split('.')[0];
 
@@ -27,10 +27,10 @@ function runJava(clientId, main, tarPath, timeLimitCompile, timeLimitExecution) 
     const sourceLocation = tarPath;
     const execution = dockerCommand(javacCmd, timeLimitCompile, dockerCommand(javaCmd, timeLimitExecution));
 
-    createJContainer(clientId, sourceLocation, false, execution);
+    createJContainer(messageId, sourceLocation, false, execution);
 };
 
-function runJunit(clientId, junitFileNames, tarPath, timeLimitCompile, timeLimitExecution) {
+function runJunit(messageId, junitFileNames, tarPath, timeLimitCompile, timeLimitExecution) {
 
     let junitFiles = [];
     junitFileNames.forEach((f)=>{
@@ -52,12 +52,12 @@ function runJunit(clientId, junitFileNames, tarPath, timeLimitCompile, timeLimit
     const sourceLocation = tarPath;
     const execution = dockerCommand(javacCmd, timeLimitCompile, dockerCommand(javaCmd, timeLimitExecution));
 
-    createJContainer(clientId, sourceLocation, true, execution);
+    createJContainer(messageId, sourceLocation, true, execution);
 };
 
 
 // Creates and starts a container with bash, JDK SE and more
-function createJContainer(clientId, javaSourceTar, isJunit, callback) {
+function createJContainer(messageId, javaSourceTar, isJunit, callback) {
 
     let copyToCall = 3;
 
@@ -74,7 +74,7 @@ function createJContainer(clientId, javaSourceTar, isJunit, callback) {
 
         if (err) {callback(err, container); return}
 
-        container['clientId'] = clientId;
+        container['messageId'] = messageId;
 
         const startOpts = {};
         container.start(startOpts, (err, data) => {
@@ -207,7 +207,7 @@ function waitCmdExit(container, exec, nextCommand, streamInfo, commandTimeOut, p
  * @feedback
  * if test files exist (junit output) and passed is true:
  * {
- *   clientId,
+ *   messageId,
  *   passed: Boolean (false if compile/runtime errors true otherwise),
  *   output: String,
  *   errorMessage: String (empty if `passed` is true),
@@ -218,7 +218,7 @@ function waitCmdExit(container, exec, nextCommand, streamInfo, commandTimeOut, p
  * }
  * otherwise:
  * {
- *   clientId,
+ *   messageId,
  *   passed: Boolean (false if compile/runtime errors true otherwise),
  *   output: String,
  *   errorMessage: String (empty if `passed` is false),
@@ -230,7 +230,7 @@ function feedbackAndClose(container, streamInfo, passed, timeOut) {
     streamInfo.endStream();
 
     const feedback = {
-        clientId: container.clientId,
+        messageId: container.messageId,
         passed: passed,
         output: (!timeOut) ? streamInfo.getOut() : '',
         errorMessage: (!timeOut) ? streamInfo.getErr() : "Reached maximum time limit",

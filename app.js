@@ -13,7 +13,7 @@ server.on('runJava', runJava);
 javaBox.on('result', giveFeedBack);
 
 
-function runJava(clientId, main, files, timeLimitCompile, timeLimitExecution) {
+function runJava(messageId, main, files, timeLimitCompile, timeLimitExecution) {
 
     let filesToAdd = files.length;
 
@@ -25,7 +25,7 @@ function runJava(clientId, main, files, timeLimitCompile, timeLimitExecution) {
 
         if (filesToAdd === 0) {
             const tarBuffer = pack.read();
-            javaBox.emit('runJava', clientId, main, tarBuffer, timeLimitCompile, timeLimitExecution);
+            javaBox.emit('runJava', messageId, main, tarBuffer, timeLimitCompile, timeLimitExecution);
         }
     };
 
@@ -34,7 +34,7 @@ function runJava(clientId, main, files, timeLimitCompile, timeLimitExecution) {
     });
 }
 
-function runJunit(clientId, tests, files, timeLimitCompile, timeLimitExecution) {
+function runJunit(messageId, tests, files, timeLimitCompile, timeLimitExecution) {
 
     let filesToAdd = files.length + tests.length;
 
@@ -46,7 +46,7 @@ function runJunit(clientId, tests, files, timeLimitCompile, timeLimitExecution) 
 
         if (filesToAdd === 0) {
             const tarBuffer = pack.read();
-            javaBox.emit('runJunit', clientId, tests, tarBuffer, timeLimitCompile, timeLimitExecution);
+            javaBox.emit('runJunit', messageId, tests, tarBuffer, timeLimitCompile, timeLimitExecution);
         }
     };
 

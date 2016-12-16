@@ -105,7 +105,7 @@ function makeConnection(clientId) {
 
         const message = {
             clientId : clientId,
-            submission : simpleSubmission,
+            submission : junitSubmission,
             compileTimeoutMs : 600000,
             executionTimeoutMs : 600000,
             charactersMaxLength: 10000
