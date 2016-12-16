@@ -128,10 +128,10 @@ function dockerCommand(command, commandTimeLimit, nextCommand) {
                 let stdErr = '';
                 const stdOutConcat = concat({}, (data) => {
                     stdOut += data;
-                });
+                }).on('error', (err) => console.log(err));
                 const stdErrConcat = concat({}, (data) => {
                     stdErr += data;
-                });
+                }).on('error', (err) => console.log(err));
 
                 container.modem.demuxStream(stream, stdOutConcat, stdErrConcat);
 
