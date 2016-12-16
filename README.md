@@ -18,7 +18,7 @@ Otherwise you need to do ```$ docker pull openjdk:8u111-jdk``` to download the r
 
 Request (containing junit files):
 ```javascript
-{
+junitRequest = {
 clientId : "1234",
 submission : 
     {
@@ -50,7 +50,7 @@ Note: if there ara files in `tests`, then `main` can be ommited as it is not nee
 
 Request (simple java code without tests):
 ```javascript
-{
+simpleRequest = {
 clientId : "1234",
 submission : 
     {
@@ -75,7 +75,7 @@ Note: `tests` field can be omitted.
 Response (if test files exist and client code compiled):
 
 ```javascript
-{
+junitResponse = {
     clientId: String,
     passed: Boolean,        // True
     output: String,
@@ -90,7 +90,7 @@ Response (if test files exist and client code compiled):
 Response (if test files don't exist or client did not compile):
 
 ```javascript
-{
+simpleResponse = {
     clientId: String,
     passed: Boolean,         // `True` if compiled, `False` otherwise
     output: String,

@@ -253,42 +253,17 @@ function feedbackAndClose(container, streamInfo, passed, timeOut) {
 
 function parseOutput(input){
 
-    /*const _INPUT_DELIMITER_ = '_!*^&_test-output';
-
-    const wholeOutput = {};
-
-    let inputParts = input.split(_INPUT_DELIMITER_);
-    const lastPartIndex = inputParts.length - 1;
-
-    wholeOutput.normalOutput = inputParts.splice(lastPartIndex, 1);
-
-    let testOutput = null;
-    try {
-        if (lastPartsIndex > 1){
-            testOutput = JSON.parse(inputParts[lastPartIndex]);
-        }
-    } catch(err) {}
-
-    if (testOutput){
-        wholeOutput.totalNumberOfTests  = testOutput.totalNumberOfTests;
-        wholeOutput.numberOfTestsPassed = testOutput.numberOfTestsPassed;
-        wholeOutput.testsOutput         = testOutput.testsOutput;
-    }
-
-    return wholeOutput;*/ /* Needs debugging */
-
     const _INPUT_DELIMITER_ = '_!*^&_test-output';
-
+    const inputParts = splitByLastDelimiter(input, _INPUT_DELIMITER_);
     const wholeOutput = {};
-
-    wholeOutput.normalOutput = input.split(_INPUT_DELIMITER_)[0];
-
     let testOutput = null;
+    wholeOutput.normalOutput = inputParts[0];
 
     try {
-        testOutput = JSON.parse(input.split(_INPUT_DELIMITER_)[1]);
-
-    } catch(err) {}
+        testOutput = JSON.parse(inputParts[1].trim());
+    } catch(err) {
+        console.log('no junit or invalid format.');
+    }
 
     if (testOutput){
         wholeOutput.totalNumberOfTests  = testOutput.totalNumberOfTests;
@@ -297,6 +272,16 @@ function parseOutput(input){
     }
 
     return wholeOutput;
+}
+
+function splitByLastDelimiter(str, del){
+    const indexToSlice = str.lastIndexOf(del);
+    let parts = ['',''];
+    parts[0] = str.substr(0, indexToSlice);
+    parts[1] = str.substr(indexToSlice+del.length);
+
+    return parts;
+
 }
 
 
