@@ -44,7 +44,6 @@ function runJunit(clientId, junitFileNames, tarPath, timeLimitCompile, timeLimit
 
     junitFiles.forEach((file)=>{
         javacCmd.push('home/' + file + '.java');
-        console.log(file);
         javaCmd.push(file);
     });
     //javacCmd.push('home/' + className + '.java'); // already compiled
@@ -254,7 +253,7 @@ function feedbackAndClose(container, streamInfo, passed, timeOut) {
 
 function parseOutput(input){
 
-    const _INPUT_DELIMITER_ = '_!*^&_test-output';
+    /*const _INPUT_DELIMITER_ = '_!*^&_test-output';
 
     const wholeOutput = {};
 
@@ -268,6 +267,27 @@ function parseOutput(input){
         if (lastPartsIndex > 1){
             testOutput = JSON.parse(inputParts[lastPartIndex]);
         }
+    } catch(err) {}
+
+    if (testOutput){
+        wholeOutput.totalNumberOfTests  = testOutput.totalNumberOfTests;
+        wholeOutput.numberOfTestsPassed = testOutput.numberOfTestsPassed;
+        wholeOutput.testsOutput         = testOutput.testsOutput;
+    }
+
+    return wholeOutput;*/ /* Needs debugging */
+
+    const _INPUT_DELIMITER_ = '_!*^&_test-output';
+
+    const wholeOutput = {};
+
+    wholeOutput.normalOutput = input.split(_INPUT_DELIMITER_)[0];
+
+    let testOutput = null;
+
+    try {
+        testOutput = JSON.parse(input.split(_INPUT_DELIMITER_)[1]);
+
     } catch(err) {}
 
     if (testOutput){

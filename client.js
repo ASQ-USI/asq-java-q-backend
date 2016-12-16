@@ -4,7 +4,7 @@ const JsonSocket = require('json-socket');
 const port = 5016;
 const host = '127.0.0.1';
 
-const helloWorldSubmission = {
+const simpleSubmission = {
     main: 'HelloWorld.java',
     files: [{
         name: 'HelloWorld.java',
@@ -28,8 +28,6 @@ const junitSubmission = {
    //@param message to be printed
    public MessageUtil(String message){
       this.message = message;
-     String s = null;
-     s.toString();
    }
       
    // prints the message
