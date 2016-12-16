@@ -18,44 +18,45 @@ function initSocket(connection) {
 
     const socket = new JsonSocket(connection);
 
-    const parseMessage = (message) => {
-
-        const clientId = message.clientId;
-        const main = message.submission.main;
-        const files = message.submission.files;
-        const tests = message.submission.tests;
-        const timeLimitCompile = message.compileTimeoutMs;
-        const timeLimitExecution = message.executionTimeoutMs;
-        const charactersMaxLength = message.charactersMaxLength;
-
-        clients[message.clientId] = {socket: socket, charactersMaxLength: charactersMaxLength};
-
-
-        if (!(clientId && (main || tests) && files && timeLimitCompile && timeLimitExecution && charactersMaxLength)) {
-            sendResult({clientId: clientId});
-            return;
-        }
-
-        if (!(timeLimitCompile > 0 && timeLimitExecution > 0)) {             // illogical values for timeout
-            sendResult({clientId: clientId});
-            return;
-        }
-
-
-        if (tests && Array.isArray(tests) && tests.length > 0) { // run junit tests
-
-            server.emit('runJunit', clientId, tests, files, timeLimitCompile, timeLimitExecution);
-
-        } else {      // run normal java code
-
-            if (!main) sendResult({clientId: clientId});
-
-            server.emit('runJava', clientId, main, files, timeLimitCompile, timeLimitExecution);
-
-        }
-    };
-
     socket.on('message', parseMessage);
+};
+
+
+const parseMessage = (message) => {
+
+    const clientId = message.clientId;
+    const main = message.submission.main;
+    const files = message.submission.files;
+    const tests = message.submission.tests;
+    const timeLimitCompile = message.compileTimeoutMs;
+    const timeLimitExecution = message.executionTimeoutMs;
+    const charactersMaxLength = message.charactersMaxLength;
+
+    clients[message.clientId] = {socket: socket, charactersMaxLength: charactersMaxLength};
+
+
+    if (!(clientId && (main || tests) && files && timeLimitCompile && timeLimitExecution && charactersMaxLength)) {
+        sendResult({clientId: clientId});
+        return;
+    }
+
+    if (!(timeLimitCompile > 0 && timeLimitExecution > 0)) {             // illogical values for timeout
+        sendResult({clientId: clientId});
+        return;
+    }
+
+
+    if (tests && Array.isArray(tests) && tests.length > 0) { // run junit tests
+
+        server.emit('runJunit', clientId, tests, files, timeLimitCompile, timeLimitExecution);
+
+    } else {      // run normal java code
+
+        if (!main) sendResult({clientId: clientId});
+
+        server.emit('runJava', clientId, main, files, timeLimitCompile, timeLimitExecution);
+
+    }
 };
 
 function sendResult(feedback) {
