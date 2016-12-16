@@ -46,7 +46,6 @@ function runJunit(messageId, junitFileNames, tarPath, timeLimitCompile, timeLimi
         javacCmd.push('home/' + file + '.java');
         javaCmd.push(file);
     });
-    //javacCmd.push('home/' + className + '.java'); // already compiled
 
 
     const sourceLocation = tarPath;
