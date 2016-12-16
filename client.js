@@ -8,13 +8,38 @@ const simpleSubmission = {
     main: 'HelloWorld.java',
     files: [{
         name: 'HelloWorld.java',
-        data: `public class HelloWorld
+        data: `import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.BufferedReader;
+import java.io.FileReader;
+import java.io.IOException;
+
+        public class HelloWorld
             {
-            public static void main(String[] args) {
-            // Prints "Hello, World" to the terminal window.
-            System.out.println("Hello, World");
-            }
-            }`
+	public static void main(String[] args) throws IOException {
+		Runtime rt = Runtime.getRuntime();
+    String[] commands = {"ls","-la"}; 
+    Process proc = rt.exec(commands);
+    
+    BufferedReader stdInput = new BufferedReader(new 
+     InputStreamReader(proc.getInputStream()));
+
+    BufferedReader stdError = new BufferedReader(new 
+         InputStreamReader(proc.getErrorStream()));
+    
+    // read the output from the command
+    System.out.println("Here is the standard output of the command:");
+    String s = null;
+    while ((s = stdInput.readLine()) != null) {
+        System.out.println(s);
+    }
+    
+    // read any errors from the attempted command
+    System.out.println("Here is the standard error of the command (if any):");
+    while ((s = stdError.readLine()) != null) {
+        System.out.println(s);
+    }
+	}}`
     }]
 };
 const junitSubmission = {

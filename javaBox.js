@@ -22,7 +22,7 @@ function runJava(messageId, main, tarPath, timeLimitCompile, timeLimitExecution)
     const className = main.split('.')[0];
 
     const javacCmd = ['javac', '-cp', 'home', `home/${main}`];
-    const javaCmd = ['java', '-cp', 'home', className];
+    const javaCmd = ['java', '-Djava.security.manager', '-cp', 'home', className];
 
     const sourceLocation = tarPath;
     const execution = dockerCommand(javacCmd, timeLimitCompile, dockerCommand(javaCmd, timeLimitExecution));
