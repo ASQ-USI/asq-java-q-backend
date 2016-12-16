@@ -21,8 +21,8 @@ function runJava(clientId, main, tarPath, timeLimitCompile, timeLimitExecution) 
 
     const className = main.split('.')[0];
 
-    const javacCmd = ['javac', 'home/' + main];
-    const javaCmd = ['java', className];
+    const javacCmd = ['javac', '-cp', 'home', `home/${main}`];
+    const javaCmd = ['java', '-cp', 'home', className];
 
     const sourceLocation = tarPath;
     const execution = dockerCommand(javacCmd, timeLimitCompile, dockerCommand(javaCmd, timeLimitExecution));
@@ -44,6 +44,7 @@ function runJunit(clientId, junitFileNames, tarPath, timeLimitCompile, timeLimit
 
     junitFiles.forEach((file)=>{
         javacCmd.push('home/' + file + '.java');
+        console.log(file);
         javaCmd.push(file);
     });
     //javacCmd.push('home/' + className + '.java'); // already compiled
@@ -127,27 +128,27 @@ function dockerCommand(command, commandTimeLimit, nextCommand) {
 
                 let stdOut = '';
                 let stdErr = '';
-                const stdOutStream = concat({}, (data) => {
+                const stdOutConcat = concat({}, (data) => {
                     stdOut += data;
                 });
-                const stdErrStream = concat({}, (data) => {
+                const stdErrConcat = concat({}, (data) => {
                     stdErr += data;
                 });
 
-                container.modem.demuxStream(stream, stdOutStream, stdErrStream);
+                container.modem.demuxStream(stream, stdOutConcat, stdErrConcat);
 
 
-                const streamManager = {
+                const streamInfo = {
 
-                    readOut: () => {return stdOut},
-                    readErr: () => {return stdErr},
+                    getOut: () => {return stdOut},
+                    getErr: () => {return stdErr},
                     endStream: () => {
-                        stdOutStream.end();
-                        stdErrStream.end();
+                        stdOutConcat.end();
+                        stdErrConcat.end();
                     }
                 };
 
-                waitCmdExit(container, exec, nextCommand, streamManager, commandTimeLimit);
+                waitCmdExit(container, exec, nextCommand, streamInfo, commandTimeLimit);
             });
         });
     };
@@ -156,7 +157,7 @@ function dockerCommand(command, commandTimeLimit, nextCommand) {
 };
 
 // Ensures that the exec process is terminated and fires the next command
-function waitCmdExit(container, exec, nextCommand, streamManager, commandTimeOut, previousTime){
+function waitCmdExit(container, exec, nextCommand, streamInfo, commandTimeOut, previousTime){
 
     let timeSpent = previousTime || 0;
 
@@ -168,11 +169,11 @@ function waitCmdExit(container, exec, nextCommand, streamManager, commandTimeOut
 
             if (timeSpent >= commandTimeOut){                           // time period expired
 
-                feedbackAndClose(container, streamManager, false, true);
+                feedbackAndClose(container, streamInfo, false, true);
 
             } else {
 
-            waitCmdExit(container, exec, nextCommand, streamManager, commandTimeOut, timeSpent);
+            waitCmdExit(container, exec, nextCommand, streamInfo, commandTimeOut, timeSpent);
 
             }
 
@@ -180,41 +181,13 @@ function waitCmdExit(container, exec, nextCommand, streamManager, commandTimeOut
 
             nextCommand(null, container);
 
-
-
-        /* * * *
-        * if test files exist (and passed is true):
-        *
-        * output: {
-        *
-        *   clientId,
-        *   passed: Boolean (false if compile/runtime errors true otherwise),
-        *   output: String,
-        *   errorMessage: String (empty if `passed` is true),
-        *   timeOut: Boolean,
-        *   totalNumberOfTests: Integer,
-        *   numberOfTestsPassed: Integer,
-        *   testsOutput: String (output of all failed tests)
-        * }
-        *
-        * otherwise:
-        *
-        * output: {
-        *
-        *   clientId,
-        *   passed: Boolean (false if compile/runtime errors true otherwise),
-        *   output: String,
-        *   errorMessage: String (empty if `passed` is false),
-        *   timeOut: Boolean
-        * * * */
-
         } else if (data.ExitCode === 0) { // command successful, it was the last command
 
-            feedbackAndClose(container, streamManager, true, false)
+            feedbackAndClose(container, streamInfo, true, false)
 
         } else { // command failed
 
-            feedbackAndClose(container, streamManager, false, false);
+            feedbackAndClose(container, streamInfo, false, false);
         }
     };
 
@@ -222,16 +195,46 @@ function waitCmdExit(container, exec, nextCommand, streamManager, commandTimeOut
 };
 
 
-// Sends back the feedback and closes the container
-function feedbackAndClose(container, streamManager, passed, timeOut) {
+/**
+ * Closes the stream, parses it assuming it could be a specific junit output,
+ * accordingly creates a feedback and emits it, closing and deleting docker container
+ * at the end.
+ *
+ * @param container Active docker container
+ * @param streamInfo Object, returns stdOut, stdIn and closes concat stream
+ * @param passed Boolean, true if no compile or runtime error during normal execution
+ * @param timeOut Boolean, true if timeout time elapsed
+ *
+ * @feedback
+ * if test files exist (junit output) and passed is true:
+ * {
+ *   clientId,
+ *   passed: Boolean (false if compile/runtime errors true otherwise),
+ *   output: String,
+ *   errorMessage: String (empty if `passed` is true),
+ *   timeOut: Boolean,
+ *   totalNumberOfTests: Integer,
+ *   numberOfTestsPassed: Integer,
+ *   testsOutput: String (output of all failed tests)
+ * }
+ * otherwise:
+ * {
+ *   clientId,
+ *   passed: Boolean (false if compile/runtime errors true otherwise),
+ *   output: String,
+ *   errorMessage: String (empty if `passed` is false),
+ *   timeOut: Boolean
+ * }
+ */
+function feedbackAndClose(container, streamInfo, passed, timeOut) {
 
-    streamManager.endStream();
+    streamInfo.endStream();
 
     const feedback = {
         clientId: container.clientId,
         passed: passed,
-        output: (!timeOut) ? streamManager.readOut() : '',
-        errorMessage: (!timeOut) ? streamManager.readErr() : "Reached maximum time limit",
+        output: (!timeOut) ? streamInfo.getOut() : '',
+        errorMessage: (!timeOut) ? streamInfo.getErr() : "Reached maximum time limit",
         timeOut: timeOut
 
     };
@@ -247,6 +250,7 @@ function feedbackAndClose(container, streamManager, passed, timeOut) {
     container.kill({}, () =>
         container.remove({v: true}, () => {}));
 }
+
 
 function parseOutput(input){
 
@@ -264,9 +268,7 @@ function parseOutput(input){
         if (lastPartsIndex > 1){
             testOutput = JSON.parse(inputParts[lastPartIndex]);
         }
-    } catch(err) {
-        console.log('no junit');
-    }
+    } catch(err) {}
 
     if (testOutput){
         wholeOutput.totalNumberOfTests  = testOutput.totalNumberOfTests;

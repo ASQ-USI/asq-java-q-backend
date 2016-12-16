@@ -23,6 +23,7 @@ function initSocket(connection) {
         const clientId = message.clientId;
         const main = message.submission.main;
         const files = message.submission.files;
+        const tests = message.submission.tests;
         const timeLimitCompile = message.compileTimeoutMs;
         const timeLimitExecution = message.executionTimeoutMs;
         const charactersMaxLength = message.charactersMaxLength;
@@ -30,7 +31,7 @@ function initSocket(connection) {
         clients[message.clientId] = {socket: socket, charactersMaxLength: charactersMaxLength};
 
 
-        if (!(clientId && files && timeLimitCompile && timeLimitExecution && charactersMaxLength)) {
+        if (!(clientId && (main || tests) && files && timeLimitCompile && timeLimitExecution && charactersMaxLength)) {
             sendResult({clientId: clientId});
             return;
         }
@@ -41,9 +42,9 @@ function initSocket(connection) {
         }
 
 
-        if (message.submission.tests && Array.isArray(message.submission.tests) && message.submission.tests.length > 0) { // run junit tests
+        if (tests && Array.isArray(tests) && tests.length > 0) { // run junit tests
 
-            server.emit('runJunit', clientId, message.submission.tests, files, timeLimitCompile, timeLimitExecution);
+            server.emit('runJunit', clientId, tests, files, timeLimitCompile, timeLimitExecution);
 
         } else {      // run normal java code
 
