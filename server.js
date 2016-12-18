@@ -1,25 +1,34 @@
 const net = require('net');
 const JsonSocket = require('json-socket');
+const Agenda = require('agenda');
 
 
-const MAX_CONCURRENT_JOBS = 50;
+/**
+ * Initialising Agenda queue with local Mongo backed persistence,
+ * 50 default concurrent jobs and 70 max cuncurrent jobs
+ */
+const mongoConnectionString = "mongodb://127.0.0.1/queue";
+const queue = new Agenda({
+    db: {address: mongoConnectionString},
+    defaultConcurrency: 50,
+    maxConcurrency: 70
+});
+queue.define('process_message', processMessageJob);
+queue.on('ready', () => queue.start());
+
+
 /**
  * @type {Object}
  * Contains preceding messages and its related information as such
- * {messageId = {socket: JsonSocket, request: Object}, ...}
+ * {messageId = {socket: JsonSocket, request: Object, done: Function}, ...}
  */
 const messages = {};
+
+
 /**
- * @type {Array}
- * Contains messages in queue and its related information as such :
- * [{messageId: String, socket: JsonSocket, request: Object}, ...]
+ * Server eventEmitter
  */
-const messagesQueue = [];
-
-
-// Server eventEmitter
 const server = net.createServer();
-
 server.on('connection', initSocket);
 server.on('result', sendResult);
 
@@ -29,26 +38,32 @@ function initSocket(connection) {
 
     const socket = new JsonSocket(connection);
 
-    const precedeMessage = (request) => {
+    const putMessageInQueue = (request) => {
 
         const messageId = createMessageId(request);
+        const jobData = {
+            messageId: messageId,
+            request: request
+        };
+        messages[messageId] = {socket: socket, request: request};
+        queue.now('process_message', jobData);
 
-        if (Object.keys(messages).length <= MAX_CONCURRENT_JOBS) {
-
-            parseRequestAndSend(request, messageId, socket);
-
-        } else {
-
-            messagesQueue.push({messageId: messageId, socket: socket, request: request});
-        }
     };
+    socket.on('message', putMessageInQueue);
+}
 
-    socket.on('message', precedeMessage);
-};
+function processMessageJob(job, done) {
 
-const parseRequestAndSend = (request, messageId, socket) => {
+    console.log('process message');
 
-    messages[messageId] = {socket: socket, request: request};
+    const request = job.attrs.data.request;
+    const messageId = job.attrs.data.messageId;
+
+    messages[messageId]['done'] = done;
+    parseRequestAndSend(request, messageId);
+}
+
+function parseRequestAndSend(request, messageId) {
 
     const clientId = request.clientId;
     const main = request.submission.main;
@@ -57,8 +72,6 @@ const parseRequestAndSend = (request, messageId, socket) => {
     const timeLimitCompile = request.compileTimeoutMs;
     const timeLimitExecution = request.executionTimeoutMs;
     const charactersMaxLength = request.charactersMaxLength;
-
-    //clients[message.clientId] = {socket: socket, charactersMaxLength: charactersMaxLength};
 
 
     if (!((main || tests) && files && timeLimitCompile && timeLimitExecution && charactersMaxLength)) {
@@ -78,12 +91,22 @@ const parseRequestAndSend = (request, messageId, socket) => {
 
     } else {      // run normal java code
 
-        if (!main) sendResult({clientId: clientId});
-
         server.emit('runJava', messageId, main, files, timeLimitCompile, timeLimitExecution);
 
     }
-};
+}
+
+/**
+ * Given a clientId creates an unique messageId
+ *
+ * @param message {string} Some random clientId
+ * @return {string} clientId + ::: + current date in milliseconds
+ */
+function createMessageId(message) {
+
+    return `${message.clientId}:::${Date.now()}`;
+}
+
 
 /**
  * Correct and truncates the feedback and sends it back.
@@ -95,6 +118,7 @@ function sendResult(feedback) {
     const socket = message.socket;
     const clientId = message.request.clientId;
     const charactersMaxLength = message.request.charactersMaxLength;
+    const done = message.done;
 
     feedback['clientId'] = clientId;
 
@@ -111,38 +135,8 @@ function sendResult(feedback) {
         console.log('socket closed before sending result back');
     }
 
-    sendFromQueue();
-
+    done();
 }
-
-/**
- * Given a clientId creates an unique messageId
- *
- * @param message {string} Some random clientId
- * @return {string} clientId + ::: + current date in milliseconds
- */
-function createMessageId(message) {
-
-    return `${message.clientId}:::${Date.now()}`;
-}
-
-/**
- * Checks whether there are messages in queue, if yes precedes them
- */
-function sendFromQueue() {
-
-    if (messagesQueue.length > 0) {
-
-        const nextMessage = messagesQueue.shift();
-        const messageId = nextMessage.messageId;
-        const socket = nextMessage.socket;
-        const request = nextMessage.request;
-
-        parseRequestAndSend(request, messageId, socket);
-    }
-}
-
-
 
 
 module.exports = server;
