@@ -4,36 +4,57 @@ const Agenda = require('agenda');
 
 
 /**
- * Initialising Agenda queue with local Mongo backed persistence,
- * 50 default concurrent jobs and 70 max cuncurrent jobs
- */
-const mongoConnectionString = "mongodb://127.0.0.1/queue";
-const queue = new Agenda({
-    db: {address: mongoConnectionString},
-    defaultConcurrency: 50,
-    maxConcurrency: 70
-});
-queue.define('process_message', processMessageJob);
-queue.on('ready', () => queue.start());
-
-
-/**
- * @type {Object}
  * Contains preceding messages and its related information as such
- * {messageId = {socket: JsonSocket, request: Object, done: Function}, ...}
+ * {messageId = {socket: JsonSocket, request: Object, done: Function}, ...}.
+ * @type {Object}
  */
 const messages = {};
+/**
+ * Agenda object, will be initialised in init function.
+ * @type {Agenda}
+ */
+const queue = new Agenda();
+/**
+ * Tcp server.
+ * @type {Server}
+ */
+const server = net.createServer();
 
 
 /**
- * Server eventEmitter
+ * Initialises server object, connects to mongo database,
+ *  and starts the server on given port.
+ *
+ * @param port {Number}: tcp port number.
+ * @param mongoAddress {String}: mongo database url.
+ * @param mongoCollection {String}: mongo database collection name.
+ * @param defaultConcurrency {Number}: default concurrent jobs number.
+ * @param maxConcurrency {Number}: max concurrent jobs number.
+ *
+ * @return {Server}: server event emitter object ()
  */
-const server = net.createServer();
-server.on('connection', initSocket);
-server.on('result', sendResult);
+function init(port, mongoAddress, mongoCollection, defaultConcurrency, maxConcurrency) {
+
+    const mongoFullAddress = `mongodb://${mongoAddress}`;
+    queue.database(mongoFullAddress, mongoCollection)
+        .defaultConcurrency(defaultConcurrency)
+        .maxConcurrency(maxConcurrency);
+    queue.define('process_message', processMessageJob);
+    queue.on('ready', () => queue.start());
+
+    server.on('connection', initSocket);
+    server.on('result', sendResult);
+    server.listen(port);
+    return server;
+}
 
 
-// Init newly created socket
+/**
+ * Given a connection creates putMessageInQueue function,
+ * creates a json socket and initialises it to accept
+ * the request with putMessageInQueue function.
+ * @param connection {Object}: A tcp connection.
+ */
 function initSocket(connection) {
 
     const socket = new JsonSocket(connection);
@@ -52,9 +73,13 @@ function initSocket(connection) {
     socket.on('message', putMessageInQueue);
 }
 
+/**
+ * Given a job and done function, stores done function,
+ * reads jobs attributes and call parseRequestAndSend function on them.
+ * @param job {Object}: Agenda job.
+ * @param done {Object}: job terminating function.
+ */
 function processMessageJob(job, done) {
-
-    console.log('process message');
 
     const request = job.attrs.data.request;
     const messageId = job.attrs.data.messageId;
@@ -63,23 +88,29 @@ function processMessageJob(job, done) {
     parseRequestAndSend(request, messageId);
 }
 
+/**
+ * Given a request and its id, parses the request, checks if it's ok,
+ * and emits the right event.
+ * @param request {Object}, request object as specified in readme.
+ * @param messageId {String}, id of the given message/request.
+ */
 function parseRequestAndSend(request, messageId) {
 
     const clientId = request.clientId;
     const main = request.submission.main;
     const files = request.submission.files;
     const tests = request.submission.tests;
-    const timeLimitCompile = request.compileTimeoutMs;
-    const timeLimitExecution = request.executionTimeoutMs;
+    const timeLimitCompileMs = request.compileTimeoutMs;
+    const timeLimitExecutionMs = request.executionTimeoutMs;
     const charactersMaxLength = request.charactersMaxLength;
 
 
-    if (!((main || tests) && files && timeLimitCompile && timeLimitExecution && charactersMaxLength)) {
+    if (!((main || tests) && files && timeLimitCompileMs && timeLimitExecutionMs && charactersMaxLength)) {
         sendResult({clientId: clientId});
         return;
     }
 
-    if (!(timeLimitCompile > 0 && timeLimitExecution > 0)) {             // illogical values for timeout
+    if (!(timeLimitCompileMs > 0 && timeLimitExecutionMs > 0)) {             // illogical values for timeout
         sendResult({clientId: clientId});
         return;
     }
@@ -87,17 +118,17 @@ function parseRequestAndSend(request, messageId) {
 
     if (tests && Array.isArray(tests) && tests.length > 0) { // run junit tests
 
-        server.emit('runJunit', messageId, tests, files, timeLimitCompile, timeLimitExecution);
+        server.emit('runJunit', messageId, tests, files, timeLimitCompileMs, timeLimitExecutionMs);
 
     } else {      // run normal java code
 
-        server.emit('runJava', messageId, main, files, timeLimitCompile, timeLimitExecution);
+        server.emit('runJava', messageId, main, files, timeLimitCompileMs, timeLimitExecutionMs);
 
     }
 }
 
 /**
- * Given a clientId creates an unique messageId
+ * Given a clientId creates an unique messageId.
  *
  * @param message {string} Some random clientId
  * @return {string} clientId + ::: + current date in milliseconds
@@ -110,7 +141,7 @@ function createMessageId(message) {
 
 /**
  * Correct and truncates the feedback and sends it back.
- * @param feedback {Object}
+ * @param feedback {Object}, feedback/result object as specified in readme or javaBox.js
  */
 function sendResult(feedback) {
 
@@ -139,4 +170,4 @@ function sendResult(feedback) {
 }
 
 
-module.exports = server;
+module.exports = init;

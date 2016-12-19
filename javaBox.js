@@ -2,35 +2,65 @@ const EventEmitter = require('events');
 const Docker = require('dockerode');
 const concat = require('concat-stream');
 
-// Docker connection
+
+/**
+ * Docker object, connected on /var/run/docker.socket or default localhost docker port.
+ * @type {Docker}
+ */
 const docker = new Docker();
 
-// Time to wait between checking that the command has been executed (milliseconds)
+/**
+ * Time to wait between checking that the command has been executed (milliseconds).
+ * @type {number}
+ */
 const EXEC_WAIT_TIME_MS = 250;
 
 
-// JavaBox eventEmitter
+/**
+ * JavaBox eventEmitter.
+ * @type {EventEmitter}
+ */
 const javaBox = new EventEmitter();
-
+/**
+ * Initialising javaBox.
+ */
 javaBox.on('runJava', runJava);
 javaBox.on('runJunit', runJunit);
 
 
-// Run the Main.java inside the tar and outputs the result to the socket
-function runJava(messageId, main, tarPath, timeLimitCompile, timeLimitExecution) {
+/**
+ * Creates a docker container with newly created execution
+ * to run the Main.java specified inside the tar.
+ *
+ * @param messageId {String}: id of the given message/request.
+ * @param main {String}: entry point class name.
+ * @param tarBuffer {String}: the buffer of the tar containing java files
+ * @param timeLimitCompileMs
+ * @param timeLimitExecutionMs
+ */
+function runJava(messageId, main, tarBuffer, timeLimitCompileMs, timeLimitExecutionMs) {
 
     const className = main.split('.')[0];
 
     const javacCmd = ['javac', '-cp', 'home', `home/${main}`];
     const javaCmd = ['java', '-Djava.security.manager', '-cp', 'home', className];
 
-    const sourceLocation = tarPath;
-    const execution = dockerCommand(javacCmd, timeLimitCompile, dockerCommand(javaCmd, timeLimitExecution));
+    const sourceLocation = tarBuffer;
+    const execution = dockerCommand(javacCmd, timeLimitCompileMs, dockerCommand(javaCmd, timeLimitExecutionMs));
 
     createJContainer(messageId, sourceLocation, false, execution);
-};
-
-function runJunit(messageId, junitFileNames, tarPath, timeLimitCompile, timeLimitExecution) {
+}
+/**
+ * Creates a docker container with newly created execution
+ * to run the tests on files to test specified inside the tar.
+ *
+ * @param messageId {String}: id of the given message/request.
+ * @param junitFileNames [String]: array of different junit tests filename.
+ * @param tarBuffer {String}: the buffer of the tar containing java files (both test and testing).
+ * @param timeLimitCompileMs
+ * @param timeLimitExecutionMs
+ */
+function runJunit(messageId, junitFileNames, tarBuffer, timeLimitCompileMs, timeLimitExecutionMs) {
 
     let junitFiles = [];
     junitFileNames.forEach((f)=>{
@@ -48,15 +78,24 @@ function runJunit(messageId, junitFileNames, tarPath, timeLimitCompile, timeLimi
     });
 
 
-    const sourceLocation = tarPath;
-    const execution = dockerCommand(javacCmd, timeLimitCompile, dockerCommand(javaCmd, timeLimitExecution));
+    const sourceLocation = tarBuffer;
+    const execution = dockerCommand(javacCmd, timeLimitCompileMs, dockerCommand(javaCmd, timeLimitExecutionMs));
 
     createJContainer(messageId, sourceLocation, true, execution);
-};
+}
 
 
-// Creates and starts a container with bash, JDK SE and more
-function createJContainer(messageId, javaSourceTar, isJunit, callback) {
+/**
+ * Creates and starts a container with bash, JDK SE, maybe junit and executes the callback
+ * passing the container or error to it.
+ *
+ * @param messageId {String}: id of the given message/request.
+ * @param tarBuffer {String}: the buffer of the tar containing java files.
+ * @param isJunit {Boolean}: true if need to create container with junit support.
+ * @param callback {function(error, container)}: callback to operate on error and container or data in case of error,
+ * should accept two arguments.
+ */
+function createJContainer(messageId, tarBuffer, isJunit, callback) {
 
     let copyToCall = 3;
 
@@ -101,21 +140,26 @@ function createJContainer(messageId, javaSourceTar, isJunit, callback) {
             }
 
             const tarOptsSource = {path: 'home'};
-            container.putArchive(javaSourceTar, tarOptsSource, (err, data) => {
+            container.putArchive(tarBuffer, tarOptsSource, (err, data) => {
                 copyToCall--;
                 if (err) callback(err, data);
                 else tryCallback(container);
             });
         });
     });
-};
+}
 
-/*
- * Returns a function that on some given container,
- * executes a specific command, attaches the specific output listener and
- * after the command is executed pipelines the next one
+/**
+ * Given a command, the timeout and the callback, returns a function that on some given container,
+ * executes the command, attaches the output listener and runs waitCmdExit.
+ *
+ * @param command {String}: command to be passed to container runtime environment.
+ * @param commandTimeLimitMs {Number}: execution timeout.
+ * @param callback {function(err, container)}: function to be executed after the command has finished.
+ *
+ * @return {function(err, container)}: function that executes the command on a container.
  */
-function dockerCommand(command, commandTimeLimit, nextCommand) {
+function dockerCommand(command, commandTimeLimitMs, callback) {
 
     const opts = {Cmd: command, AttachStdout: true, AttachStderr: true};
 
@@ -127,10 +171,18 @@ function dockerCommand(command, commandTimeLimit, nextCommand) {
                 let stdOut = '';
                 let stdErr = '';
                 const stdOutConcat = concat({}, (data) => {
-                    stdOut += data;
+                    try {
+                        stdOut += data;
+                    } catch (e) {
+                        stdOut = 'Output larger than 268435440 bytes.';
+                    }
                 }).on('error', (err) => {});
                 const stdErrConcat = concat({}, (data) => {
-                    stdErr += data;
+                    try {
+                        stdErr += data;
+                    } catch (e) {
+                        stdOut = 'Output larger than 268435440 bytes.';
+                    }
                 }).on('error', (err) => {});
 
                 container.modem.demuxStream(stream, stdOutConcat, stdErrConcat);
@@ -146,38 +198,46 @@ function dockerCommand(command, commandTimeLimit, nextCommand) {
                     }
                 };
 
-                waitCmdExit(container, exec, nextCommand, streamInfo, commandTimeLimit);
+                waitCmdExit(container, exec, callback, streamInfo, commandTimeLimitMs);
             });
         });
     };
 
     return execution;
-};
+}
 
-// Ensures that the exec process is terminated and fires the next command
-function waitCmdExit(container, exec, nextCommand, streamInfo, commandTimeOut, previousTime){
+/**
+ *
+ * @param container {Container}: Active docker container.
+ * @param exec {Object}: Docker execution object.
+ * @param callback {function(err, container)}: function to be executed after the command has finished.
+ * @param streamInfo {Object}: returns stdOut, stdIn and closes concat stream
+ * @param commandTimeOutMs {Number}: execution timeout in ms.
+ * @param previousTimeMs {Number}: ms already spent on this execution.
+ */
+function waitCmdExit(container, exec, callback, streamInfo, commandTimeOutMs, previousTimeMs){
 
-    let timeSpent = previousTime || 0;
+    let timeSpentMs = previousTimeMs || 0;
 
     const checkExit = (err, data) => {
 
         if (data.Running) { // command is still running, check later or send time out
 
-            timeSpent += EXEC_WAIT_TIME_MS;                             // count time spent
+            timeSpentMs += EXEC_WAIT_TIME_MS;                             // count time spent
 
-            if (timeSpent >= commandTimeOut){                           // time period expired
+            if (timeSpentMs >= commandTimeOutMs){                           // time period expired
 
                 feedbackAndClose(container, streamInfo, false, true);
 
             } else {
 
-            waitCmdExit(container, exec, nextCommand, streamInfo, commandTimeOut, timeSpent);
+            waitCmdExit(container, exec, callback, streamInfo, commandTimeOutMs, timeSpentMs);
 
             }
 
-        } else if ((data.ExitCode === 0) && (nextCommand)) { // command successful, has next command
+        } else if ((data.ExitCode === 0) && (callback)) { // command successful, has next command
 
-            nextCommand(null, container);
+            callback(null, container);
 
         } else if (data.ExitCode === 0) { // command successful, it was the last command
 
@@ -190,15 +250,14 @@ function waitCmdExit(container, exec, nextCommand, streamInfo, commandTimeOut, p
     };
 
     setTimeout(() => exec.inspect(checkExit), EXEC_WAIT_TIME_MS);
-};
-
+}
 
 /**
  * Closes the stream, parses it assuming it could be a specific junit output,
  * accordingly creates a feedback and emits it, closing and deleting docker container
  * at the end.
  *
- * @param container Active docker container
+ * @param container {Container}: Active docker container.
  * @param streamInfo Object, returns stdOut, stdIn and closes concat stream
  * @param passed Boolean, true if no compile or runtime error during normal execution
  * @param timeOut Boolean, true if timeout time elapsed
@@ -249,29 +308,36 @@ function feedbackAndClose(container, streamInfo, passed, timeOut) {
         container.remove({v: true}, () => {}));
 }
 
-
-function parseOutput(input){
+/**
+ * Given a possibly junit output, parses it and if it's junit, adds
+ * information about passed tests to the return object.
+ *
+ * @param output {String}: the stdout of the execution.
+ *
+ * @return {Object}: Contains stdout and possibly some info about junit tests.
+ */
+function parseOutput(output){
 
     const _INPUT_DELIMITER_ = '_!*^&_test-output';
 
-    const wholeOutput = {};
+    const outputObject = {};
 
-    wholeOutput.normalOutput = input.split(_INPUT_DELIMITER_)[0];
+    outputObject.normalOutput = output.split(_INPUT_DELIMITER_)[0];
 
     let testOutput = null;
 
     try {
-        testOutput = JSON.parse(input.split(_INPUT_DELIMITER_)[1]);
+        testOutput = JSON.parse(output.split(_INPUT_DELIMITER_)[1]);
 
     } catch(err) {}
 
     if (testOutput){
-        wholeOutput.totalNumberOfTests  = testOutput.totalNumberOfTests;
-        wholeOutput.numberOfTestsPassed = testOutput.numberOfTestsPassed;
-        wholeOutput.testsOutput         = testOutput.testsOutput;
+        outputObject.totalNumberOfTests  = testOutput.totalNumberOfTests;
+        outputObject.numberOfTestsPassed = testOutput.numberOfTestsPassed;
+        outputObject.testsOutput         = testOutput.testsOutput;
     }
 
-    return wholeOutput;
+    return outputObject;
 }
 
 

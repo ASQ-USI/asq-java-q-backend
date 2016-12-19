@@ -1,6 +1,6 @@
 # asq-java-q-backend
 
-## branch of supprting Junit tests using a prestructured "orchestrator" JAVA class
+## branch of supporting Junit tests using a prestructured "orchestrator" JAVA class
 
 ### Info
 
@@ -11,6 +11,17 @@ It uses /var/run/docker.socket to connect to it, so on windows it may not be wor
 
 Before installing npm dependencies with ```$ npm install``` make sure that docker is running.
 Otherwise you need to do ```$ docker pull openjdk:8u111-jdk``` to download the right openjdk image.
+
+To run the server use:
+
+```$ node app.js [-p port number] [-a mongo adress] [-c mongo collection] [-d default concurrent jobs number] [-m max concurrent jobs number]```
+
+Defaults are:
+- Port number: 5016
+- Mongo address: 127.0.0.1/queue
+- Mongo collection: agendaJobs
+- Default concurrent jobs number: 40
+- Max concurrent jobs number: 70
 
 
 ### Communication API
@@ -42,11 +53,11 @@ submission :
             data: "@Test public void bar(){ assert(1==2);}"
          }
     ],
-    timeLimitCompile : 2000,
-    timeLimitExecution : 1000
+    timeLimitCompileMs : 2000,
+    timeLimitExecutionMs : 1000
 }
 ```
-Note: if there ara files in `tests`, then `main` can be ommited as it is not needed.
+Note: if there are files in `tests`, then `main` can be ommited as it is not needed.
 
 Request (simple java code without tests):
 ```javascript
@@ -65,8 +76,8 @@ submission :
         }]
     },
     tests: [],
-    timeLimitCompile : 2000,
-    timeLimitExecution : 1000
+    timeLimitCompileMs : 2000,
+    timeLimitExecutionMs : 1000
 }
 ```
 Note: `tests` field can be omitted.
@@ -121,5 +132,20 @@ $ docker rm -v $(docker ps -aq)
 ### Client
 
 Client.js is a script done to test the server. 
-It accepts an integer as the command line argument (default 1) and tries to do the same number of requests.
+To run the client use:
+
+```$ cd test```
+```$ node clien.js [-c number of client] [-s submission name]```
+
+Defaults are:
+- Number of client: 1
+- Submission name: hwSub
+
+Possible submission names are:
+- hwSub
+- infiniteSub
+- rmSub
+- getPropsSub
+- junitSub
+
 For each request it prints out the response and the time it took to receive it.
