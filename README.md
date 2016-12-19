@@ -135,7 +135,8 @@ Client.js is a script done to test the server.
 To run the client use:
 
 ```$ cd test```
-```$ node clien.js [-c number of client] [-s submission name]```
+
+```$ node client.js [-c number of client] [-s submission name]```
 
 Defaults are:
 - Number of client: 1
