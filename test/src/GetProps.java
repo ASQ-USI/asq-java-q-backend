@@ -1,6 +1,3 @@
-import java.lang.*;
-import java.security.*;
-
 class GetProps {
 
     public static void main(String[] args) {

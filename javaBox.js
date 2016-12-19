@@ -97,7 +97,7 @@ function runJunit(messageId, junitFileNames, tarBuffer, timeLimitCompileMs, time
  */
 function createJContainer(messageId, tarBuffer, isJunit, callback) {
 
-    let copyToCall = 3;
+    let copyToCall = 4;
 
     const tryCallback = (container) => {
 
@@ -117,12 +117,20 @@ function createJContainer(messageId, tarBuffer, isJunit, callback) {
         const startOpts = {};
         container.start(startOpts, (err, data) => {
 
-            if (err) {callback(err, data); return};
+            if (err) {callback(err, data); return}
 
             if (isJunit) {
 
                 const tarOptsRunner = {path: 'home'};
                 container.putArchive('./archives/TestRunner.class.tar', tarOptsRunner, (err, data) => {
+                    copyToCall--;
+                    if (err) callback(err, data);
+                    else tryCallback(container);
+
+                });
+
+                const tarOptsSecureTest = {path: 'home'};
+                container.putArchive('./archives/SecureTest.class.tar', tarOptsSecureTest, (err, data) => {
                     copyToCall--;
                     if (err) callback(err, data);
                     else tryCallback(container);
@@ -207,13 +215,17 @@ function dockerCommand(command, commandTimeLimitMs, callback) {
 }
 
 /**
+ * Given an execution of a command on a container, a stream handler and command timeout
+ * waits for the command to be finished or timeout to be expired and calls the callback
+ * if it isn't null, otherwise it calls the feedbackAndClose function.
  *
  * @param container {Container}: Active docker container.
  * @param exec {Object}: Docker execution object.
  * @param callback {function(err, container)}: function to be executed after the command has finished.
  * @param streamInfo {Object}: returns stdOut, stdIn and closes concat stream
  * @param commandTimeOutMs {Number}: execution timeout in ms.
- * @param previousTimeMs {Number}: ms already spent on this execution.
+ * @param previousTimeMs {Number}: ms already spent on this execution, called when the function is called
+ * recursively, should not be passed otherwise.
  */
 function waitCmdExit(container, exec, callback, streamInfo, commandTimeOutMs, previousTimeMs){
 

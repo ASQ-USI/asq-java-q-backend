@@ -1,13 +1,10 @@
 # asq-java-q-backend
 
-## branch of supporting Junit tests using a prestructured "orchestrator" JAVA class
-
-### Info
+## Info
 
 Backend for sandboxed Java execution for the asq-java-q question type
 
-To run the service, you need docker running on the machine.
-It uses /var/run/docker.socket to connect to it, so on windows it may not be working.
+To run the service, you need docker running on the machine and access to a mongo database.
 
 Before installing npm dependencies with ```$ npm install``` make sure that docker is running.
 Otherwise you need to do ```$ docker pull openjdk:8u111-jdk``` to download the right openjdk image.
@@ -24,10 +21,11 @@ Defaults are:
 - Max concurrent jobs number: 70
 
 
-### Communication API
+## Communication API
 
 
-Request (containing junit files):
+#### Request (containing junit files):
+
 ```javascript
 junitRequest = {
 clientId : "1234",
@@ -59,7 +57,10 @@ submission :
 ```
 Note: if there are files in `tests`, then `main` can be ommited as it is not needed.
 
-Request (simple java code without tests):
+Important: test classes must extend `SecureTest` class!
+
+#### Request (simple java code without tests):
+
 ```javascript
 simpleRequest = {
 clientId : "1234",
@@ -83,7 +84,7 @@ submission :
 Note: `tests` field can be omitted.
 
 
-Response (if test files exist and client code compiled):
+#### Response (if test files exist and client code compiled):
 
 ```javascript
 junitResponse = {
@@ -98,7 +99,7 @@ junitResponse = {
 }
 ```
 
-Response (if test files don't exist or client did not compile):
+#### Response (if test files don't exist or client did not compile):
 
 ```javascript
 simpleResponse = {
@@ -110,7 +111,7 @@ simpleResponse = {
 }
 ```
 
-### Work with docker in terminal
+## Work with docker in terminal
 
 - Run image in docker: 
 ```
@@ -129,7 +130,7 @@ $ docker kill $(docker ps -aq)
 $ docker rm -v $(docker ps -aq)
 ```
 
-### Client
+## Client
 
 Client.js is a script done to test the server. 
 To run the client use:
