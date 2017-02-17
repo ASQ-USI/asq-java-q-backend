@@ -1,6 +1,8 @@
 const tar = require('tar-stream');
 const fs = require('fs');
 const commandLineArgs = require('command-line-args');
+const Promise = require('bluebird');
+const coroutine = Promise.coroutine;
 
 
 /**
@@ -38,12 +40,22 @@ const server = require('./server')(
  */
 const javaBox = require('./javaBox');
 
+
 /**
- * Specifying the server and javaBox control flow
+ * Given a .tar pack and a file, return a promise to insert the file into the tar.
+ *
+ * @param file {Object}: the file to be inserted into the tar.
+ * @param file.name {string}: the filename.
+ * @param file.data {string}: data the file contains.
+ * @param tarPack {Object}: A tar-stream to be used for inserting the file into the tar.
+ * @return {Promise}: a promise to insert the file.
  */
-server.on('runJunit', runJunit);
-server.on('runJava', runJava);
-javaBox.on('result', giveFeedBack);
+const insertFileToTar = coroutine(function*(file, tarPack) {
+    return new Promise(function (reject, resolve) {
+        tarPack.entry({name: file.name}, file.data); // no need for callback there
+        resolve();
+    });
+});
 
 
 /**
@@ -52,30 +64,23 @@ javaBox.on('result', giveFeedBack);
  *
  * @param messageId {String}: id of the given message/request.
  * @param main {String}: entry point class name.
- * @param files [{name: {String}, data: {String]: array of objects with filename and its content
+ * @param files {{name: String, data: String}[]}: array of objects with filename and its content
  * @param timeLimitCompileMs {Number}: Compilation timeout.
  * @param timeLimitExecutionMs {Number}: Execution timeout.
  */
-function runJava(messageId, main, files, timeLimitCompileMs, timeLimitExecutionMs) {
-
-    let filesToAdd = files.length;
+const runJava = coroutine(function*(messageId, main, files, timeLimitCompileMs, timeLimitExecutionMs) {
 
     const pack = tar.pack();
+    const fileEntriesPromises = [];
+    for (let file in files) {
+        fileEntriesPromises.push(yield insertFileToTar(file, pack));
+    }
 
-    const tryTarAndRun = () => {
-
-        filesToAdd--;
-
-        if (filesToAdd === 0) {
-            const tarBuffer = pack.read();
-            javaBox.emit('runJava', messageId, main, tarBuffer, timeLimitCompileMs, timeLimitExecutionMs);
-        }
-    };
-
-    files.forEach((file) => {
-        pack.entry({ name: file.name }, file.data, tryTarAndRun);
+    Promise.all(fileEntriesPromises).then(() => {
+        const tarBuffer = pack.read();
+        javaBox.emit('runJava', messageId, main, tarBuffer, timeLimitCompileMs, timeLimitExecutionMs);
     });
-}
+});
 
 /**
  * Given code to execute and to test and info about it,
@@ -87,30 +92,23 @@ function runJava(messageId, main, files, timeLimitCompileMs, timeLimitExecutionM
  * @param timeLimitCompileMs {Number}: Compilation timeout.
  * @param timeLimitExecutionMs {Number}: Execution timeout.
  */
-function runJunit(messageId, tests, files, timeLimitCompileMs, timeLimitExecutionMs) {
+const runJunit = coroutine(function *(messageId, tests, files, timeLimitCompileMs, timeLimitExecutionMs) {
 
-    let filesToAdd = files.length + tests.length;
+    files = files.concat(tests);
 
     const pack = tar.pack();
+    const fileEntriesPromises = [];
+    for (let file in files) {
+        fileEntriesPromises.push(yield insertFileToTar(file, pack));
 
-    const tryTarAndRun = () => {
+    }
 
-        filesToAdd--;
-
-        if (filesToAdd === 0) {
-            const tarBuffer = pack.read();
-            javaBox.emit('runJunit', messageId, tests, tarBuffer, timeLimitCompileMs, timeLimitExecutionMs);
-        }
-    };
-
-    files.forEach((file) => {
-        pack.entry({ name: file.name }, file.data, tryTarAndRun);
+    Promise.all(fileEntriesPromises).then(() => {
+        const tarBuffer = pack.read();
+        javaBox.emit('runJunit', messageId, tests, tarBuffer, timeLimitCompileMs, timeLimitExecutionMs);
     });
 
-    tests.forEach((test) => {
-        pack.entry({ name: test.name }, test.data, tryTarAndRun);
-    });
-}
+});
 
 /**
  * Given the feedback object passes it to the server.
@@ -121,6 +119,9 @@ function giveFeedBack(feedback) {
     server.emit('result', feedback);
 }
 
-
-
-
+/**
+ * Specifying the server and javaBox control flow
+ */
+server.on('runJunit', runJunit);
+server.on('runJava', runJava);
+javaBox.on('result', giveFeedBack);
