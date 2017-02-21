@@ -4,14 +4,23 @@ const Promise = require('bluebird');
 const coroutine = Promise.coroutine;
 
 /**
- * Contains preceding messages and its related information as such
- * {messageId = {socket: JsonSocket, request: Object, done: Function}, ...}.
+ * @typdef {Object} JsonSocket
+ * @typedef {Object} Request
+ */
+
+/**
+ * "Dictionary" containing preceding messages and its related information as such
+ * "messageId" {String} -> {
+ *     socket: {JsonSocket},
+ *     request: {Request},
+ *     done: Function
+ * }
  * @type {Object}
  */
 const messages = {};
 /**
  * Agenda object, will be initialised in init function.
- * @type {Agenda}
+ * @type {Queue}
  */
 const queue = require('./queue');
 
@@ -63,9 +72,9 @@ const init = coroutine(function*(port, mongoAddress, mongoCollection, defaultCon
 
 
 /**
- * Given a connection creates putMessageInQueue function,
- * creates a json socket and initialises it to accept
- * the request with putMessageInQueue function.
+ * When a new connection is established,
+ * creates a new socket
+ * and inserts request object into the queue for execution.
  * @param connection {Object}: A tcp connection.
  */
 function initSocket(connection) {
@@ -74,13 +83,22 @@ function initSocket(connection) {
     socket.on('message', addMessageInQueue.bind(null, socket));
 }
 
+/**
+ * Adds a request from a socket to the queue for execution.
+ * @param socket: {JsonSocket}
+ * @param request: {Request}
+ */
 function addMessageInQueue(socket, request) {
 
     const messageId = queue.addMessage(request);
     messages[messageId] = {socket: socket, request: request};
 }
 
-
+/**
+ * Process the execution of a job-request.
+ * @param job {Object}: An `Agenda` job.
+ * @param done {Function}: A callback to execute when finished, in case the function is asynchronous.
+ */
 function processMessageJob(job, done) {
 
     const request = job.attrs.data.request;
@@ -97,7 +115,12 @@ function processMessageJob(job, done) {
 
     done(); // not needed, useful for async code
 }
-
+/**
+ * Checks whether a request is valid or not, given the request specification
+ *(See: https://github.com/ASQ-USI/asq-java-q-backend/blob/master/README.md#communication-api)
+ * @param request {Request}: The request to be checked.
+ * @return {boolean} : Returns `false` if request has one or more missing properties or illogical values, `true` otherwise.
+ */
 function isRequestValid(request) {
     const main = request.submission.main;
     const files = request.submission.files;
@@ -115,6 +138,10 @@ function isRequestValid(request) {
     }
 }
 
+/**
+ * Sends back to corresponding client error code and closes connection.
+ * @param messageId {String}: The id in the queue of the bad request message.
+ */
 function sendResultForBadRequest(messageId) {
     const message = messages[messageId];
     const socket = message.socket;
@@ -127,9 +154,8 @@ function sendResultForBadRequest(messageId) {
 }
 
 /**
- * Given a request and its id, parses the request, checks if it's ok,
- * and emits the right event.
- * @param request {Object}, request object as specified in readme.
+ * Executes the request by emitting 'runJunit' or 'runJava' event.
+ * @param request {Request}
  * @param messageId {String}, id of the given message/request.
  */
 function executeRequest(request, messageId) {
@@ -152,7 +178,7 @@ function executeRequest(request, messageId) {
     }
 }
 /**
- * Correct and truncates the feedback and sends it back.
+ * Correct and truncates the feedback and sends it back. Also closes connection.
  * @param feedback {Object}: feedback/result object as specified in readme or javaBox.js
  * @param feedback.messageId {string}
  */
