@@ -33,30 +33,13 @@ const server = require('./server')(
     commandLine.mongoAddress,
     commandLine.mongoCollection,
     commandLine.defaultConcurrency,
-    commandLine.maxConcurrency);
+    commandLine.maxConcurrency
+);
 /**
  * Object controlling docker specified in javaBox.js
  * @type {EventEmitter}
  */
 const javaBox = require('./javaBox');
-
-
-/**
- * Given a .tar pack and a file, return a promise to insert the file into the tar.
- *
- * @param file {Object}: the file to be inserted into the tar.
- * @param file.name {string}: the filename.
- * @param file.data {string}: data the file contains.
- * @param tarPack {Object}: A tar-stream to be used for inserting the file into the tar.
- * @return {Promise}: a promise to insert the file.
- */
-const insertFileToTar = coroutine(function*(file, tarPack) {
-    return new Promise(function (reject, resolve) {
-        tarPack.entry({name: file.name}, file.data); // no need for callback there
-        resolve();
-    });
-});
-
 
 /**
  * Given code to execute and info about it,
@@ -71,17 +54,18 @@ const insertFileToTar = coroutine(function*(file, tarPack) {
 const runJava = coroutine(function*(messageId, main, files, timeLimitCompileMs, timeLimitExecutionMs) {
 
     const pack = tar.pack();
-    const fileEntriesPromises = [];
-    for (let file in files) {
-        fileEntriesPromises.push(yield insertFileToTar(file, pack));
-    }
+    const packEntry = Promise.promisify(pack.entry, {context: pack});
 
-    Promise.all(fileEntriesPromises).then(() => {
+    Promise.map(files, function (file) {
+        return packEntry({name: file.name}, file.data);
+
+    }).then(function () {
         const tarBuffer = pack.read();
         javaBox.emit('runJava', messageId, main, tarBuffer, timeLimitCompileMs, timeLimitExecutionMs);
-    });
-});
 
+    });
+
+});
 /**
  * Given code to execute and to test and info about it,
  * creates a tar with the code and passed the info and the tar to javaBox.
@@ -97,15 +81,15 @@ const runJunit = coroutine(function *(messageId, tests, files, timeLimitCompileM
     files = files.concat(tests);
 
     const pack = tar.pack();
-    const fileEntriesPromises = [];
-    for (let file in files) {
-        fileEntriesPromises.push(yield insertFileToTar(file, pack));
+    const packEntry = Promise.promisify(pack.entry, {context: pack});
 
-    }
+    Promise.map(files, function (file) {
+        return packEntry({name: file.name}, file.data);
 
-    Promise.all(fileEntriesPromises).then(() => {
+    }).then(function () {
         const tarBuffer = pack.read();
-        javaBox.emit('runJunit', messageId, tests, tarBuffer, timeLimitCompileMs, timeLimitExecutionMs);
+        javaBox.emit('runJava', messageId, main, tarBuffer, timeLimitCompileMs, timeLimitExecutionMs);
+
     });
 
 });

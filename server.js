@@ -1,7 +1,7 @@
 const net = require('net');
 const JsonSocket = require('json-socket');
-const Agenda = require('agenda');
-
+const Promise = require('bluebird');
+const coroutine = Promise.coroutine;
 
 /**
  * Contains preceding messages and its related information as such
@@ -13,17 +13,23 @@ const messages = {};
  * Agenda object, will be initialised in init function.
  * @type {Agenda}
  */
-const queue = new Agenda();
+const queue = require('./queue');
+
+/**
+ * @typedef {Object} Server
+ */
 /**
  * Tcp server.
  * @type {Server}
  */
 const server = net.createServer();
+//TODO: is this correct?
+server.listen = Promise.promisify(server.listen);
+
 
 
 /**
- * Initialises server object, connects to mongo database,
- *  and starts the server on given port.
+ * Initialises server and queue for storing requests.
  *
  * @param port {Number}: tcp port number.
  * @param mongoAddress {String}: mongo database url.
@@ -33,20 +39,27 @@ const server = net.createServer();
  *
  * @return {Server}: server event emitter object ()
  */
-function init(port, mongoAddress, mongoCollection, defaultConcurrency, maxConcurrency) {
+const init = coroutine(function*(port, mongoAddress, mongoCollection, defaultConcurrency, maxConcurrency) {
 
     const mongoFullAddress = `mongodb://${mongoAddress}`;
-    queue.database(mongoFullAddress, mongoCollection)
-        .defaultConcurrency(defaultConcurrency)
-        .maxConcurrency(maxConcurrency);
-    queue.define('process_message', processMessageJob);
-    queue.on('ready', () => queue.start());
+    const queueInitParams = {
+        mongoFullAddress,
+        mongoCollection,
+        maxConcurrency,
+        defaultConcurrency
+    };
+    yield queue.initialize(queueInitParams, processMessageJob);
+    queue.start();
+
 
     server.on('connection', initSocket);
     server.on('result', sendResult);
-    server.listen(port);
+
+    yield server.listen(port);
+    console.log(`server listening on port ${port}...`);
+
     return server;
-}
+});
 
 
 /**
@@ -58,34 +71,59 @@ function init(port, mongoAddress, mongoCollection, defaultConcurrency, maxConcur
 function initSocket(connection) {
 
     const socket = new JsonSocket(connection);
-
-    const putMessageInQueue = (request) => {
-
-        const messageId = createMessageId(request);
-        const jobData = {
-            messageId: messageId,
-            request: request
-        };
-        messages[messageId] = {socket: socket, request: request};
-        queue.now('process_message', jobData);
-
-    };
-    socket.on('message', putMessageInQueue);
+    socket.on('message', addMessageInQueue.bind(null, socket));
 }
 
-/**
- * Given a job and done function, stores done function,
- * reads jobs attributes and call parseRequestAndSend function on them.
- * @param job {Object}: Agenda job.
- * @param done {Object}: job terminating function.
- */
+function addMessageInQueue(socket, request) {
+
+    const messageId = queue.addMessage(request);
+    messages[messageId] = {socket: socket, request: request};
+}
+
+
 function processMessageJob(job, done) {
 
     const request = job.attrs.data.request;
     const messageId = job.attrs.data.messageId;
 
     messages[messageId]['done'] = done;
-    parseRequestAndSend(request, messageId);
+
+    if (isRequestValid(request)) {
+        executeRequest(request, messageId);
+
+    } else {
+        sendResultForBadRequest(messageId);
+    }
+
+    done(); // not needed, useful for async code
+}
+
+function isRequestValid(request) {
+    const main = request.submission.main;
+    const files = request.submission.files;
+    const tests = request.submission.tests;
+    const timeLimitCompileMs = request.compileTimeoutMs;
+    const timeLimitExecutionMs = request.executionTimeoutMs;
+    const charactersMaxLength = request.charactersMaxLength;
+
+    if (!((main || tests) && files && timeLimitCompileMs && timeLimitExecutionMs && charactersMaxLength)) { // absence of parameter
+        return false;
+    } else if (!(timeLimitCompileMs > 0 && timeLimitExecutionMs > 0)) {             // illogical values for timeout
+        return false;
+    } else {
+        return true;
+    }
+}
+
+function sendResultForBadRequest(messageId) {
+    const message = messages[messageId];
+    const socket = message.socket;
+    const clientId = message.request.clientId;
+    try {
+        socket.sendEndMessage({}); //TODO: define output for bad requests
+    } catch (e) {
+        console.log(`73: Socket with client ${clientId} closed before sending result back.`);
+    }
 }
 
 /**
@@ -94,26 +132,13 @@ function processMessageJob(job, done) {
  * @param request {Object}, request object as specified in readme.
  * @param messageId {String}, id of the given message/request.
  */
-function parseRequestAndSend(request, messageId) {
+function executeRequest(request, messageId) {
 
-    const clientId = request.clientId;
     const main = request.submission.main;
     const files = request.submission.files;
     const tests = request.submission.tests;
     const timeLimitCompileMs = request.compileTimeoutMs;
     const timeLimitExecutionMs = request.executionTimeoutMs;
-    const charactersMaxLength = request.charactersMaxLength;
-
-
-    if (!((main || tests) && files && timeLimitCompileMs && timeLimitExecutionMs && charactersMaxLength)) {
-        sendResult({clientId: clientId});
-        return;
-    }
-
-    if (!(timeLimitCompileMs > 0 && timeLimitExecutionMs > 0)) {             // illogical values for timeout
-        sendResult({clientId: clientId});
-        return;
-    }
 
 
     if (tests && Array.isArray(tests) && tests.length > 0) { // run junit tests
@@ -126,22 +151,10 @@ function parseRequestAndSend(request, messageId) {
 
     }
 }
-
-/**
- * Given a clientId creates an unique messageId.
- *
- * @param message {string} Some random clientId
- * @return {string} clientId + ::: + current date in milliseconds
- */
-function createMessageId(message) {
-
-    return `${message.clientId}:::${Date.now()}`;
-}
-
-
 /**
  * Correct and truncates the feedback and sends it back.
- * @param feedback {Object}, feedback/result object as specified in readme or javaBox.js
+ * @param feedback {Object}: feedback/result object as specified in readme or javaBox.js
+ * @param feedback.messageId {string}
  */
 function sendResult(feedback) {
 
@@ -163,7 +176,7 @@ function sendResult(feedback) {
     try {
         socket.sendEndMessage(feedback);
     } catch (e) {
-        console.log('socket closed before sending result back');
+        console.log(`73: Socket with client ${clientId} closed before sending result back.`);
     }
 
     done();
