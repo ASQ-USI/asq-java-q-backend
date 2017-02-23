@@ -1,20 +1,26 @@
 const EventEmitter = require('events');
-const Docker = require('dockerode');
+const Promise = require('bluebird');
+const coroutine = Promise.coroutine;
+const Docker = Promise.promisifyAll(require('dockerode'));
+//TODO: is promisfy applied recursively?????
 const concat = require('concat-stream');
 
+
+/**
+ * @typedef {Object} ExecutionOutput
+ * @type ExecutionOutput.messageId {String}
+ * @type ExecutionOutput.success {Boolean}
+ * @type ExecutionOutput.output {String}
+ * @type ExecutionOutput.errorMessage {String}
+ * @type ExecutionOutput.timeout {Boolean}
+ *
+ */
 
 /**
  * Docker object, connected on /var/run/docker.socket or default localhost docker port.
  * @type {Docker}
  */
 const docker = new Docker();
-
-/**
- * Time to wait between checking that the command has been executed (milliseconds).
- * @type {number}
- */
-const EXEC_WAIT_TIME_MS = 250;
-
 
 /**
  * JavaBox eventEmitter.
@@ -38,29 +44,50 @@ javaBox.on('runJunit', runJunit);
  * @param timeLimitCompileMs
  * @param timeLimitExecutionMs
  */
-function runJava(messageId, main, tarBuffer, timeLimitCompileMs, timeLimitExecutionMs) {
+const runJava = coroutine(function*(messageId, main, tarBuffer, timeLimitCompileMs, timeLimitExecutionMs) {
 
     const className = main.split('.')[0];
+
+    let container = yield initializeContainer(tarBuffer, messageId);
 
     const javacCmd = ['javac', '-cp', 'home', `home/${main}`];
     const javaCmd = ['java', '-Djava.security.manager', '-cp', 'home', className];
 
-    const sourceLocation = tarBuffer;
-    const execution = dockerCommand(javacCmd, timeLimitCompileMs, dockerCommand(javaCmd, timeLimitExecutionMs));
+    try {
+        //TODO: Subcalls of coroutines
+        const compileOutput = runCommand(javacCmd, container, timeLimitCompileMs);
+        if (executedCorrectly(compileOutput)) {
 
-    createJContainer(messageId, sourceLocation, false, execution);
-}
-/**
- * Creates a docker container with newly created execution
- * to run the tests on files to test specified inside the tar.
- *
- * @param messageId {String}: id of the given message/request.
- * @param junitFileNames [String]: array of different junit tests filename.
- * @param tarBuffer {String}: the buffer of the tar containing java files (both test and testing).
- * @param timeLimitCompileMs
- * @param timeLimitExecutionMs
- */
-function runJunit(messageId, junitFileNames, tarBuffer, timeLimitCompileMs, timeLimitExecutionMs) {
+            const runtimeOutput = runCommand(javaCmd, container, timeLimitExecutionMs);
+            if (executedCorrectly(runtimeOutput)) {
+                emitSuccess(runtimeOutput);
+
+            } else {
+                if (runtimeOutput.timeout) emitTimeout(runtimeOutput, 'Runtime');
+                else emitWrong(runtimeOutput, 'Runtime');
+            }
+
+        } else {
+            if (compileOutput.timeout) emitTimeout(compileOutput, 'Compile');
+            else emitWrong(compileOutput, 'Compile');
+        }
+
+
+        yield container.kill();
+        yield container.remove({v: true});
+
+    } catch (e) { // internal error
+        //TODO: specify javaBox behavior for internal error
+        console.log('500: Internal error with Docker!');
+        emitServerError();
+        yield container.kill();
+        yield container.remove({v: true});
+    }
+
+});
+
+
+const runJunit = coroutine(function*(messageId, junitFileNames, tarBuffer, timeLimitCompileMs, timeLimitExecutionMs) {
 
     let junitFiles = [];
     junitFileNames.forEach((f)=>{
@@ -68,6 +95,8 @@ function runJunit(messageId, junitFileNames, tarBuffer, timeLimitCompileMs, time
     });
 
     const className = 'TestRunner';
+
+    let container = yield initializeContainer(tarBuffer, messageId, true);
 
     const javacCmd = ['javac', '-cp', 'home:libs/junit-4.12:libs/hamcrest-core-1.3:libs/json-simple-1.1.1'];
     let javaCmd = ['java', '-cp', 'home:libs/junit-4.12:libs/hamcrest-core-1.3:libs/json-simple-1.1.1', className];
@@ -77,248 +106,126 @@ function runJunit(messageId, junitFileNames, tarBuffer, timeLimitCompileMs, time
         javaCmd.push(file);
     });
 
+    try {
+        //TODO: Subcalls of coroutines
+        const compileOutput = runCommand(javacCmd, container, timeLimitCompileMs);
+        if (executedCorrectly(compileOutput)) {
 
-    const sourceLocation = tarBuffer;
-    const execution = dockerCommand(javacCmd, timeLimitCompileMs, dockerCommand(javaCmd, timeLimitExecutionMs));
+            const runtimeOutput = runCommand(javaCmd, container, timeLimitExecutionMs);
+            if (executedCorrectly(runtimeOutput)) {
+                emitSuccess(runtimeOutput, true);
 
-    createJContainer(messageId, sourceLocation, true, execution);
-}
+            } else {
+                if (runtimeOutput.timeout) emitTimeout(runtimeOutput, 'Runtime');
+                else emitWrong(runtimeOutput, 'Runtime');
+            }
 
-
-/**
- * Creates and starts a container with bash, JDK SE, maybe junit and executes the callback
- * passing the container or error to it.
- *
- * @param messageId {String}: id of the given message/request.
- * @param tarBuffer {String}: the buffer of the tar containing java files.
- * @param isJunit {Boolean}: true if need to create container with junit support.
- * @param callback {function(error, container)}: callback to operate on error and container or data in case of error,
- * should accept two arguments.
- */
-function createJContainer(messageId, tarBuffer, isJunit, callback) {
-
-    let copyToCall = 4;
-
-    const tryCallback = (container) => {
-
-        if (copyToCall === 0) {
-
-            callback(null, container);
+        } else {
+            if (compileOutput.timeout) emitTimeout(compileOutput, 'Compile');
+            else emitWrong(compileOutput, 'Compile');
         }
-    };
+
+
+        yield container.kill();
+        yield container.remove({v: true});
+
+    } catch (e) { // internal error
+        //TODO: specify javaBox behavior for internal error
+        console.log('500: Internal error with Docker!');
+        emitServerError();
+        yield container.kill();
+        yield container.remove({v: true});
+    }
+
+});
+
+const initializeContainer = coroutine(function*(tarBuffer, messageId, junit) {
+
+    junit = junit || false;
 
     const createOpts = {Image: 'openjdk:8u111-jdk', Tty: true, Cmd: ['/bin/bash']};
-    docker.createContainer(createOpts, (err, container) => {
+    let container = yield docker.createContainerAsync(createOpts);
+    container['messageId'] = messageId;
 
-        if (err) {callback(err, container); return}
+    const startOps = {};
+    yield container.startAsync(startOps);
 
-        container['messageId'] = messageId;
+    const tarOptsSource = {path: 'home'};
+    yield container.putArchiveAsync(tarBuffer, tarOptsSource);
 
-        const startOpts = {};
-        container.start(startOpts, (err, data) => {
+    if (junit) {
+        yield container.putArchiveAsync('./archives/SecureTest.class.tar', {path: 'home'});
+        yield container.putArchive('./archives/libs.tar', {path: '/'});
+    }
 
-            if (err) {callback(err, data); return}
+    return container;
+});
 
-            if (isJunit) {
-
-                const tarOptsRunner = {path: 'home'};
-                container.putArchive('./archives/TestRunner.class.tar', tarOptsRunner, (err, data) => {
-                    copyToCall--;
-                    if (err) callback(err, data);
-                    else tryCallback(container);
-
-                });
-
-                const tarOptsSecureTest = {path: 'home'};
-                container.putArchive('./archives/SecureTest.class.tar', tarOptsSecureTest, (err, data) => {
-                    copyToCall--;
-                    if (err) callback(err, data);
-                    else tryCallback(container);
-
-                });
-
-                const tarOptsLibs = {path: '/'};
-                container.putArchive('./archives/libs.tar', tarOptsLibs, (err, data) => {
-                    copyToCall--;
-                    if (err) callback(err, data);
-                    else tryCallback(container);
-                });
-            } else {
-                copyToCall = 1;
-            }
-
-            const tarOptsSource = {path: 'home'};
-            container.putArchive(tarBuffer, tarOptsSource, (err, data) => {
-                copyToCall--;
-                if (err) callback(err, data);
-                else tryCallback(container);
-            });
-        });
-    });
-}
 
 /**
- * Given a command, the timeout and the callback, returns a function that on some given container,
- * executes the command, attaches the output listener and runs waitCmdExit.
+ * Run a command inside a container, capture and return output streams and successful execution.
  *
- * @param command {String}: command to be passed to container runtime environment.
- * @param commandTimeLimitMs {Number}: execution timeout.
- * @param callback {function(err, container)}: function to be executed after the command has finished.
+ * @param command {String[]}: A command with arguments to execute
+ * @param container {Container}: The container, properly initialised (from initializeContainer), for execution
+ * @param executionTimeLimit {Number} [Optional]: The number in milliseconds after which, execution should stop
+ * @return The result of the execution indicating if the execution was successful and the output of the stdout/ stderr.
+ * @return result {ExecutionOutput}
+ * @throws Error
  *
- * @return {function(err, container)}: function that executes the command on a container.
  */
-function dockerCommand(command, commandTimeLimitMs, callback) {
+const runCommand = coroutine(function *(command, container, executionTimeLimit) {
 
-    const opts = {Cmd: command, AttachStdout: true, AttachStderr: true};
+    let timeout = null;
+    let stdoutData = '';
+    let stderrData = '';
 
-    const execution = (err, container) => {
+    try {                                                                                               // possible errors with docker container
+        const execOpts = {Cmd: command, AttachStdout: true, AttachStderr: true, Tty: false};            // execution options
+        const exec = yield container.execAsync(execOpts);                                               // create execution of command
 
-        if (!err) container.exec(opts, (err, exec) => {
-            exec.start((err, stream) => {
+        const stream = yield container.attach({stream: true, stdout: true, stderr: true});              // prepare streams
+        container.modem.demuxStream(stream, (d) => {
+            stdoutData += d
+        }, (d) => {
+            stderrData += d
+        });              // get output chunks                                                        // get stdout and stderr
 
-                let stdOut = '';
-                let stdErr = '';
-                const stdOutConcat = concat({}, (data) => {
-                    try {
-                        stdOut += data;
-                    } catch (e) {
-                        stdOut = 'Output larger than 268435440 bytes.';
-                    }
-                }).on('error', (err) => {});
-                const stdErrConcat = concat({}, (data) => {
-                    try {
-                        stdErr += data;
-                    } catch (e) {
-                        stdOut = 'Output larger than 268435440 bytes.';
-                    }
-                }).on('error', (err) => {});
+        yield exec.startAsync();                                                                        // start execution
 
-                container.modem.demuxStream(stream, stdOutConcat, stdErrConcat);
+        if (executionTimeLimit) timeout = setTimeout(throwTimeOutError, executionTimeLimit);            // start keeping time
 
+        yield stream.onAsync('end');   //will this work????????????                                     // wait until finished
 
-                const streamInfo = {
+        const executionData = yield exec.inspectAsync();                                               // get data of execution
+        const executedSuccessfully = (!executionData.Running) ? (executionData.ExitCode == 0) : null;   // set successful execution mark
+        // should never be null
 
-                    getOut: () => {return stdOut},
-                    getErr: () => {return stdErr},
-                    endStream: () => {
-                        stdOutConcat.end();
-                        stdErrConcat.end();
-                    }
-                };
+        if (executionTimeLimit) clearTimeout(timeout);
 
-                waitCmdExit(container, exec, callback, streamInfo, commandTimeLimitMs);
-            });
-        });
-    };
-
-    return execution;
-}
-
-/**
- * Given an execution of a command on a container, a stream handler and command timeout
- * waits for the command to be finished or timeout to be expired and calls the callback
- * if it isn't null, otherwise it calls the feedbackAndClose function.
- *
- * @param container {Container}: Active docker container.
- * @param exec {Object}: Docker execution object.
- * @param callback {function(err, container)}: function to be executed after the command has finished.
- * @param streamInfo {Object}: returns stdOut, stdIn and closes concat stream
- * @param commandTimeOutMs {Number}: execution timeout in ms.
- * @param previousTimeMs {Number}: ms already spent on this execution, called when the function is called
- * recursively, should not be passed otherwise.
- */
-function waitCmdExit(container, exec, callback, streamInfo, commandTimeOutMs, previousTimeMs){
-
-    let timeSpentMs = previousTimeMs || 0;
-
-    const checkExit = (err, data) => {
-
-        if (data.Running) { // command is still running, check later or send time out
-
-            timeSpentMs += EXEC_WAIT_TIME_MS;                             // count time spent
-
-            if (timeSpentMs >= commandTimeOutMs){                           // time period expired
-
-                feedbackAndClose(container, streamInfo, false, true);
-
-            } else {
-
-            waitCmdExit(container, exec, callback, streamInfo, commandTimeOutMs, timeSpentMs);
-
-            }
-
-        } else if ((data.ExitCode === 0) && (callback)) { // command successful, has next command
-
-            callback(null, container);
-
-        } else if (data.ExitCode === 0) { // command successful, it was the last command
-
-            feedbackAndClose(container, streamInfo, true, false)
-
-        } else { // command failed
-
-            feedbackAndClose(container, streamInfo, false, false);
+        return {
+            messageId: container.messageId,
+            success: executedSuccessfully,
+            output: stdoutData,
+            errorMessage: stderrData,
+            timeout: false
         }
-    };
 
-    setTimeout(() => exec.inspect(checkExit), EXEC_WAIT_TIME_MS);
-}
+    } catch (e) {
+        container.stop();
 
-/**
- * Closes the stream, parses it assuming it could be a specific junit output,
- * accordingly creates a feedback and emits it, closing and deleting docker container
- * at the end.
- *
- * @param container {Container}: Active docker container.
- * @param streamInfo Object, returns stdOut, stdIn and closes concat stream
- * @param passed Boolean, true if no compile or runtime error during normal execution
- * @param timeOut Boolean, true if timeout time elapsed
- *
- * @feedback
- * if test files exist (junit output) and passed is true:
- * {
- *   messageId,
- *   passed: Boolean (false if compile/runtime errors true otherwise),
- *   output: String,
- *   errorMessage: String (empty if `passed` is true),
- *   timeOut: Boolean,
- *   totalNumberOfTests: Integer,
- *   numberOfTestsPassed: Integer,
- *   testsOutput: String (output of all failed tests)
- * }
- * otherwise:
- * {
- *   messageId,
- *   passed: Boolean (false if compile/runtime errors true otherwise),
- *   output: String,
- *   errorMessage: String (empty if `passed` is false),
- *   timeOut: Boolean
- * }
- */
-function feedbackAndClose(container, streamInfo, passed, timeOut) {
-
-    streamInfo.endStream();
-
-    const feedback = {
-        messageId: container.messageId,
-        passed: passed,
-        output: (!timeOut) ? streamInfo.getOut() : '',
-        errorMessage: (!timeOut) ? streamInfo.getErr() : "Reached maximum time limit",
-        timeOut: timeOut
-
-    };
-
-    const parsed = parseOutput(feedback.output);
-    feedback.output = parsed.normalOutput;
-    feedback.totalNumberOfTests = parsed.totalNumberOfTests;
-    feedback.numberOfTestsPassed = parsed.numberOfTestsPassed;
-    feedback.testsOutput = parsed.testsOutput;
-
-    javaBox.emit('result', feedback);
-
-    container.kill({}, () =>
-        container.remove({v: true}, () => {}));
-}
+        if (e.name == 'timeout') {
+            return {
+                messageId: container.messageId,
+                success: false,
+                output: stdoutData,
+                errorMessage: stderrData,
+                timeout: true
+            }
+        } else {
+            throw e;
+        }
+    }
+});
 
 /**
  * Given a possibly junit output, parses it and if it's junit, adds
@@ -352,5 +259,77 @@ function parseOutput(output){
     return outputObject;
 }
 
+/**
+ * Check if a command executed correctly, by analyzing the result object.
+ *
+ * @param result {Object || ExecutionOutput}
+ * @param result.timeout: {Boolean}
+ * @param result.success: {Boolean}
+ * @return {boolean}: `true` if command exited with code 0 and no time out occurred, `false` otherwise.
+ */
+function executedCorrectly(result) {
+    return (result.success && !result.timeout);
+}
 
-module.exports = javaBox;
+/**
+ * Dummy function to raise (throw) a custom timeout error
+ * @param stage {String} [Optional]: The stage in which timeout happened.
+ * @throws timeout {Object}
+ * @type timeout.name {string}
+ * @type timeout.stage {string}
+ */
+function throwTimeOutError(stage) {
+    stage = stage || '';
+    throw {
+        name: 'timeout',
+        stage: stage
+    };
+}
+
+
+function emitServerError() {
+    //TODO: implement
+}
+
+/**
+ * Emit `result` event with success values.
+ *
+ * @param executionOutput {ExecutionOutput}: Output of a run command execution
+ * @param junit {Boolean} [Optional][Default: false]: Set to true if execution output is from junit orchestrator class for parsing.
+ */
+function emitSuccess(executionOutput, junit) {
+    junit = junit || false;
+    const feedback = executionOutput;
+
+    if (junit) {
+        const parsed = parseOutput(feedback.output);
+        feedback.output = parsed.normalOutput;
+        feedback.totalNumberOfTests = parsed.totalNumberOfTests;
+        feedback.numberOfTestsPassed = parsed.numberOfTestsPassed;
+        feedback.testsOutput = parsed.testsOutput;
+    }
+    javaBox.emit('result', feedback);
+}
+
+/**
+ * Emit `result` event with timeout values.
+ *
+ * @param executionOutput {ExecutionOutput}: Output of a run command execution
+ * @param stage {'compile' || 'runtime'}[Optional]: In which stage this function is called
+ */
+function emitTimeout(executionOutput, stage) {
+    const feedback = executionOutput;
+    feedback.errorMessage = `${stage} timeout reached.`;
+    javaBox.emit('result', feedback);
+}
+
+/**
+ * Emit `result` event with error values.
+ *
+ * @param executionOutput {ExecutionOutput}: Output of a run command execution
+ * @param stage {'compile' || 'runtime'}[Optional]: In which stage this function is called
+ */
+function emitWrong(executionOutput, stage) {
+    const feedback = executionOutput;
+    javaBox.emit('result', feedback);
+}
