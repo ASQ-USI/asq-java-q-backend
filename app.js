@@ -88,7 +88,7 @@ const runJunit = coroutine(function *(messageId, tests, files, timeLimitCompileM
 
     }).then(function () {
         const tarBuffer = pack.read();
-        javaBox.emit('runJava', messageId, main, tarBuffer, timeLimitCompileMs, timeLimitExecutionMs);
+        javaBox.emit('runJunit', messageId, junitFileNames, tarBuffer, timeLimitCompileMs, timeLimitExecutionMs);
 
     });
 

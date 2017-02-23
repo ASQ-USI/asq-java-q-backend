@@ -88,6 +88,48 @@ const runJava = coroutine(function*(messageId, main, tarBuffer, timeLimitCompile
 });
 
 
+const runJunit = coroutine(function*(messageId, main, tarBuffer, timeLimitCompileMs, timeLimitExecutionMs) {
+
+    const className = main.split('.')[0];
+
+    let container = yield initializeContainer(tarBuffer, messageId);
+
+    const javacCmd = ['javac', '-cp', 'home', `home/${main}`];
+    const javaCmd = ['java', '-Djava.security.manager', '-cp', 'home', className];
+
+    try {
+        //TODO: Subcalls of coroutines
+        const compileOutput = runCommand(javacCmd, container, timeLimitCompileMs);
+        if (executedCorrectly(compileOutput)) {
+
+            const runtimeOutput = runCommand(javaCmd, container, timeLimitExecutionMs);
+            if (executedCorrectly(runtimeOutput)) {
+                emitSuccess(runtimeOutput);
+
+            } else {
+                if (runtimeOutput.timeout) emitTimeout(runtimeOutput, 'Runtime');
+                else emitWrong(runtimeOutput, 'Runtime');
+            }
+
+        } else {
+            if (compileOutput.timeout) emitTimeout(compileOutput, 'Compile');
+            else emitWrong(compileOutput, 'Compile');
+        }
+
+
+        yield container.kill();
+        yield container.remove({v: true});
+
+    } catch (e) { // internal error
+        //TODO: specify javaBox behavior for internal error
+        console.log('500: Internal error with Docker!');
+        emitServerError();
+        yield container.kill();
+        yield container.remove({v: true});
+    }
+
+});
+
 const initializeContainer = coroutine(function*(tarBuffer, messageId) {
 
     const createOpts = {Image: 'openjdk:8u111-jdk', Tty: true, Cmd: ['/bin/bash']};
