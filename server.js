@@ -65,7 +65,7 @@ const init = coroutine(function*(port, mongoAddress, mongoCollection, defaultCon
     server.on('result', sendResult);
 
     yield server.listen(port);
-    console.log(`server listening on port ${port}...`);
+    console.log(`Server listening on port ${port}...`);
 
     return server;
 });

@@ -26,7 +26,7 @@ const queue = new Agenda();
  *
  * @return {Promise}: A promise for starting the queue
  */
-queue.prototype.initialize = function (queueParams, processMessageJob) {
+Agenda.prototype.initialize = function (queueParams, processMessageJob) {
 
     return new Promise((resolve, reject) => {
 
@@ -41,7 +41,7 @@ queue.prototype.initialize = function (queueParams, processMessageJob) {
     });
 };
 
-queue.prototype.addMessage = function (request) {
+Agenda.prototype.addMessage = function (request) {
 
     const messageId = createMessageId(request);
     const jobData = {
