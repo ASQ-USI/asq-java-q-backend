@@ -12,7 +12,7 @@ const host = '127.0.0.1';
  */
 const commandLineDef = [
     { name: 'clients', alias: 'c', type: Number, defaultValue: 1},
-    { name: 'submission', alias: 's', type: String, defaultValue: 'hwSub'}
+    {name: 'submission', alias: 's', type: String, defaultValue: 'exceptionPlusOutput'}
 ];
 /**
  * Object that for keys has command line argument names
@@ -53,6 +53,7 @@ function simpleSubmission(command) {
 const submissions = {
     hwSub: simpleSubmission(`System.out.println("Hello world."); `),
     infiniteSub: simpleSubmission(`while (true) { System.out.println("To infinity and beyond!"); }`),
+    exceptionPlusOutput: simpleSubmission("System.out.println(\"Standard output message\" ); String s=null; s.toString();"),
     rmSub: {
         main: 'RemoveSub.java',
         files: [{
@@ -79,7 +80,8 @@ const submissions = {
             name: 'TestJunit2.java',
             data: fs.readFileSync('src/TestJunit2.java', 'utf8'),
         }]
-    }
+    },
+
 };
 
 
