@@ -113,7 +113,7 @@ function processMessageJob(job, done) {
         sendResultForBadRequest(messageId);
     }
 
-    done(); // not needed, useful for async code
+    //done(); // not needed, useful for async code
 }
 /**
  * Checks whether a request is valid or not, given the request specification
