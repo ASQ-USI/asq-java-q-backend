@@ -1,7 +1,7 @@
 {
   "name": "javabox",
-  "version": "1.0.0",
-  "description": "Server to procede java code",
+  "version": "1.1.0",
+  "description": "Server for compiling and running Java code",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
@@ -15,6 +15,7 @@
     "concat-stream": "^1.5.2",
     "dockerode": "^2.3.1",
     "json-socket": "^0.2.0",
-    "tar-stream": "^1.5.2"
+    "tar-stream": "^1.5.2",
+    "bluebird": "^2.8.2"
   }
 }

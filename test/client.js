@@ -11,8 +11,8 @@ const host = '127.0.0.1';
  * @type {[*]}
  */
 const commandLineDef = [
-    { name: 'clients', alias: 'c', type: Number, defaultValue: 1},
-    { name: 'submission', alias: 's', type: String, defaultValue: 'hwSub'}
+    {name: 'clients', alias: 'c', type: Number, defaultValue: 50},
+    {name: 'submission', alias: 's', type: String, defaultValue: 'infiniteSub'}
 ];
 /**
  * Object that for keys has command line argument names
@@ -53,6 +53,7 @@ function simpleSubmission(command) {
 const submissions = {
     hwSub: simpleSubmission(`System.out.println("Hello world."); `),
     infiniteSub: simpleSubmission(`while (true) { System.out.println("To infinity and beyond!"); }`),
+    exceptionPlusOutput: simpleSubmission("System.out.println(\"Standard output message\" ); String s=null; s.toString();"),
     rmSub: {
         main: 'RemoveSub.java',
         files: [{
@@ -79,7 +80,8 @@ const submissions = {
             name: 'TestJunit2.java',
             data: fs.readFileSync('src/TestJunit2.java', 'utf8'),
         }]
-    }
+    },
+
 };
 
 
@@ -110,8 +112,8 @@ function makeConnection(clientId) {
         const message = {
             clientId : clientId,
             submission : submission,
-            compileTimeoutMs : 60000,
-            executionTimeoutMs : 60000,
+            compileTimeoutMs: 15000,
+            executionTimeoutMs: 6000,
             charactersMaxLength: 1000
 
         };
@@ -131,9 +133,8 @@ function makeConnection(clientId) {
             console.log(`Clients left: ${clientsLeft}\n \n`);
         });
     });
-};
-
+}
 for (var i = 0; i < clientsNumber; i++) {
     const clientId = 'client' + i;
     makeConnection(clientId);
-};
+}
