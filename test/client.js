@@ -11,8 +11,8 @@ const host = '127.0.0.1';
  * @type {[*]}
  */
 const commandLineDef = [
-    { name: 'clients', alias: 'c', type: Number, defaultValue: 1},
-    {name: 'submission', alias: 's', type: String, defaultValue: 'exceptionPlusOutput'}
+    {name: 'clients', alias: 'c', type: Number, defaultValue: 50},
+    {name: 'submission', alias: 's', type: String, defaultValue: 'infiniteSub'}
 ];
 /**
  * Object that for keys has command line argument names
@@ -112,8 +112,8 @@ function makeConnection(clientId) {
         const message = {
             clientId : clientId,
             submission : submission,
-            compileTimeoutMs: 6000,
-            executionTimeoutMs: 600,
+            compileTimeoutMs: 15000,
+            executionTimeoutMs: 6000,
             charactersMaxLength: 1000
 
         };

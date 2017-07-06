@@ -109,6 +109,7 @@ const main = coroutine(function*() {
     /**
      * Specifying the server and javaBox control flow
      */
+
     server.on('runJunit', runJunit);
     server.on('runJava', runJava);
     javaBox.on('result', giveFeedBack);

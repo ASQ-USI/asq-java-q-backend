@@ -65,7 +65,7 @@ const init = coroutine(function*(port, mongoAddress, mongoCollection, defaultCon
     server.on('result', sendResult);
 
     yield server.listen(port);
-    console.log(`Server listening on port ${port}...`);
+    console.log(`JavaBox listening on port ${port}...`);
 
     return server;
 });
@@ -78,6 +78,7 @@ const init = coroutine(function*(port, mongoAddress, mongoCollection, defaultCon
  * @param connection {Object}: A tcp connection.
  */
 function initSocket(connection) {
+
 
     const socket = new JsonSocket(connection);
     socket.on('message', addMessageInQueue.bind(null, socket));
@@ -160,6 +161,7 @@ function sendResultForBadRequest(messageId) {
  */
 function executeRequest(request, messageId) {
 
+    console.log('executing request for ' + messageId);
     const main = request.submission.main;
     const files = request.submission.files;
     const tests = request.submission.tests;
@@ -183,6 +185,8 @@ function executeRequest(request, messageId) {
  * @param feedback.messageId {string}
  */
 function sendResult(feedback) {
+
+    console.log('>>sending back to ' + feedback.messageId);
 
     const message = messages[feedback.messageId];
     const socket = message.socket;

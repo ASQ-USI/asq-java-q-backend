@@ -46,6 +46,7 @@ const javaBox = new EventEmitter();
  */
 const runJava = coroutine(function*(messageId, main, tarBuffer, timeLimitCompileMs, timeLimitExecutionMs) {
 
+
     const className = main.split('.')[0];
 
     let container = yield initializeContainer(tarBuffer, messageId);
@@ -54,39 +55,37 @@ const runJava = coroutine(function*(messageId, main, tarBuffer, timeLimitCompile
     const javaCmd = ['java', '-Djava.security.manager', '-cp', 'home', className];
 
     try {
-        const compileOutput = yield runCommand(javacCmd, container, timeLimitCompileMs);
+        const compileOutput = yield runCommand(javacCmd, container, timeLimitCompileMs, 'compilation');
 
         if (executedCorrectly(compileOutput)) {
 
 
-            const runtimeOutput = yield runCommand(javaCmd, container, timeLimitExecutionMs);
+            const runtimeOutput = yield runCommand(javaCmd, container, timeLimitExecutionMs, 'execution');
 
             if (executedCorrectly(runtimeOutput)) {
                 //TODO: maybe also return compileOutput for warnings?
                 emitSuccess(runtimeOutput);
 
             } else {
-
-                if (runtimeOutput.timeout) emitTimeout(runtimeOutput, 'Runtime');
+                if (runtimeOutput.timeout) emitTimeout(runtimeOutput, 'execution');
                 else emitWrong(runtimeOutput, 'Runtime');
             }
 
         } else {
-
-            if (compileOutput.timeout) emitTimeout(compileOutput, 'Compile');
+            if (compileOutput.timeout) emitTimeout(compileOutput, 'compilation');
             else emitWrong(compileOutput, 'Compile');
         }
 
+        yield container.stopAsync();
+        yield container.removeAsync({f: true});
 
-        yield container.killAsync();
-        yield container.removeAsync({v: true});
 
     } catch (e) { // internal error
         //TODO: specify javaBox behavior for internal error
         console.log('500: Internal error with Docker!');
         emitServerError(e);
-        yield container.kill();
-        yield container.remove({v: true});
+        yield container.killAsync({t: 0});
+        yield container.removeAsync({f: true});
     }
 
 });
@@ -112,33 +111,33 @@ const runJunit = coroutine(function*(messageId, junitFileNames, tarBuffer, timeL
     });
 
     try {
-        const compileOutput = yield runCommand(javacCmd, container, timeLimitCompileMs);
+        const compileOutput = yield runCommand(javacCmd, container, timeLimitCompileMs, 'compilation');
         if (executedCorrectly(compileOutput)) {
 
-            const runtimeOutput = yield runCommand(javaCmd, container, timeLimitExecutionMs);
+            const runtimeOutput = yield runCommand(javaCmd, container, timeLimitExecutionMs, 'execution');
             if (executedCorrectly(runtimeOutput)) {
                 emitSuccess(runtimeOutput, true);
 
             } else {
-                if (runtimeOutput.timeout) emitTimeout(runtimeOutput, 'Runtime');
+                if (runtimeOutput.timeout) emitTimeout(runtimeOutput, 'execution');
                 else emitWrong(runtimeOutput, 'Runtime');
             }
 
         } else {
-            if (compileOutput.timeout) emitTimeout(compileOutput, 'Compile');
+            if (compileOutput.timeout) emitTimeout(compileOutput, 'compilation');
             else emitWrong(compileOutput, 'Compile');
         }
 
 
-        yield container.killAsync();
-        yield container.removeAsync({v: true});
+        yield container.stopAsync();
+        yield container.removeAsync({f: true});
 
     } catch (e) { // internal error
         //TODO: specify javaBox behavior for internal error
-        console.log('501: Internal error with Docker!');
+        console.log('500: Internal error with Docker!');
         emitServerError(e);
-        yield container.kill();
-        yield container.remove({v: true});
+        yield container.killAsync({t: 0});
+        yield container.removeAsync({f: true});
     }
 
 });
@@ -180,53 +179,44 @@ const initializeContainer = coroutine(function*(tarBuffer, messageId, junit) {
  */
 const runCommand = coroutine(function *(command, container, executionTimeLimit) {
 
-    let timeout = null;
+    let timeoutCallback = null;
+    let timeoutHappend = false;
     const stdoutStream = new OutputStream();
     const stderrStream = new OutputStream();
 
-    try {                                                                                               // possible errors with docker container
-        const execOpts = {Cmd: command, AttachStdout: true, AttachStderr: true, Tty: false};            // execution options
-        const exec = Promise.promisifyAll(yield container.execAsync(execOpts));                         // create execution of command
 
-        const stream = yield exec.startAsync();                                                         // start execution (get an output stream)
-        container.modem.demuxStream(stream, stdoutStream, stderrStream);                                // intercept container output to our streams
+    const execOpts = {Cmd: command, AttachStdout: true, AttachStderr: true, Tty: false};            // execution options
+    const exec = Promise.promisifyAll(yield container.execAsync(execOpts));                         // create execution of command
 
-        if (executionTimeLimit) timeout = setTimeout(throwTimeOutError, executionTimeLimit);            // start keeping time
+    const stream = yield exec.startAsync();                                                         // start execution (get an output stream)
+    container.modem.demuxStream(stream, stdoutStream, stderrStream);                                // intercept container output to our streams
 
-
-        let executionData = yield exec.inspectAsync();
-        while (executionData.Running) {                                                                // loop (asynchronously) until execution stops
-            executionData = yield exec.inspectAsync();
-        }
-
-
-        const executedSuccessfully = (executionData.ExitCode == 0);                                    // set successful execution mark
-
-        if (executionTimeLimit) clearTimeout(timeout);
-
-        return {
-            messageId: container.messageId,
-            success: executedSuccessfully,
-            output: stdoutStream.toString(),
-            errorMessage: stderrStream.toString(),
-            timeout: false
-        }
-
-    } catch (e) {
-        container.stopAsync();
-
-        if (e.name == 'timeout') {
-            return {
-                messageId: container.messageId,
-                success: false,
-                output: stdoutData,
-                errorMessage: stderrData,
-                timeout: true
-            }
-        } else {
-            throw e;
-        }
+    if (executionTimeLimit) {                                                                        // start keeping time
+        timeoutCallback = setTimeout(() => {
+            timeoutHappend = true
+        }, executionTimeLimit);                // prepare timeout termination
     }
+
+
+    let executionData = yield exec.inspectAsync();
+    while (executionData.Running && timeoutHappend == false) {                                                                // loop (asynchronously) until execution stops
+        executionData = yield exec.inspectAsync();
+    }
+
+
+    const executedSuccessfully = (executionData.ExitCode == 0 && timeoutHappend == false);                                    // set successful execution mark
+
+    if (executionTimeLimit) clearTimeout(timeoutCallback);
+
+    return {
+        messageId: container.messageId,
+        success: executedSuccessfully,
+        output: stdoutStream.toString(),
+        errorMessage: stderrStream.toString(),
+        timeout: timeoutHappend
+    }
+
+
 });
 
 /**
@@ -273,22 +263,6 @@ function executedCorrectly(result) {
     return (result.success && !result.timeout);
 }
 
-/**
- * Dummy function to raise (throw) a custom timeout error
- * @param stage {String} [Optional]: The stage in which timeout happened.
- * @throws timeout {Object}
- * @type timeout.name {string}
- * @type timeout.stage {string}
- */
-function throwTimeOutError(stage) {
-    stage = stage || '';
-    throw {
-        name: 'timeout',
-        stage: stage
-    };
-}
-
-
 function emitServerError(e) {
     throw e;
 }
@@ -314,22 +288,31 @@ function emitSuccess(executionOutput, junit) {
 }
 
 /**
- * Emit `result` event with timeout values.
+ * Emit `result` event with timeout values and error message.
  *
- * @param executionOutput {ExecutionOutput}: Output of a run command execution
- * @param stage {"compile" | "runtime"}[Optional]: In which stage this function is called
+ * @param feedback {Object}: The feedback with all the info to be emitted back.
+ * @param stage {String}[Optional]: In which stage this function is called.
  */
-function emitTimeout(executionOutput, stage) {
-    const feedback = executionOutput;
-    feedback.errorMessage = `${stage} timeout reached.`;
+function emitTimeout(feedback, stage) {//messageId, stdoutStream, stderrStream, stage) {
+
+
+    feedback.errorMessage += '\n>>>JavaBox: Timeout reached';
+
+    if (stage) {
+        feedback.errorMessage += ` during ${stage}.`;
+    } else {
+        feedback.errorMessage += '.';
+    }
+
     javaBox.emit('result', feedback);
+
 }
 
 /**
  * Emit `result` event with error values.
  *
- * @param executionOutput {ExecutionOutput}: Output of a run command execution
- * @param stage {'compile' || 'runtime'}[Optional]: In which stage this function is called
+ * @param executionOutput {ExecutionOutput}: Output of a run command execution.
+ * @param stage {String}[Optional]: In which stage this function is called.
  */
 function emitWrong(executionOutput, stage) {
     javaBox.emit('result', executionOutput);
