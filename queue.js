@@ -26,30 +26,30 @@ const queue = new Agenda();
  *
  * @return {Promise}: A promise for starting the queue
  */
-Agenda.prototype.initialize = function (queueParams, processMessageJob) {
+Agenda.prototype.initialize = function(queueParams, processMessageJob) {
 
-    return new Promise((resolve, reject) => {
+  return new Promise((resolve, reject) => {
 
-        queue.database(queueParams.mongoFullAddress, queueParams.mongoCollection)
-            .defaultConcurrency(queueParams.defaultConcurrency)
-            .maxConcurrency(queueParams.maxConcurrency);
+    queue.database(queueParams.mongoFullAddress, queueParams.mongoCollection)
+      .defaultConcurrency(queueParams.defaultConcurrency)
+      .maxConcurrency(queueParams.maxConcurrency);
 
-        queue.define('process_message', processMessageJob);
+    queue.define('process_message', processMessageJob);
 
-        queue.on('ready', resolve); // use .then(queue.start())
-        queue.on('error', reject);
-    });
+    queue.on('ready', resolve); // use .then(queue.start())
+    queue.on('error', reject);
+  });
 };
 
-Agenda.prototype.addMessage = function (request) {
+Agenda.prototype.addMessage = function(request) {
 
-    const messageId = createMessageId(request);
-    const jobData = {
-        messageId: messageId,
-        request: request
-    };
-    queue.now('process_message', jobData);
-    return messageId;
+  const messageId = createMessageId(request);
+  const jobData = {
+    messageId: messageId,
+    request: request
+  };
+  queue.now('process_message', jobData);
+  return messageId;
 };
 
 /**
@@ -60,12 +60,7 @@ Agenda.prototype.addMessage = function (request) {
  * @return {string} clientId + ::: + current date in milliseconds
  */
 function createMessageId(message) {
-    return `${message.clientId}:::${Date.now()}`;
+  return `${message.clientId}:::${Date.now()}`;
 }
 
 module.exports = queue;
-
-
-
-
-

@@ -56,204 +56,227 @@ const javaBox = new EventEmitter();
  * @param {Number} timeLimitCompileMs
  * @param {Number} timeLimitExecutionMs
  */
-const runJava = coroutine(function*(messageId, main, tarBuffer, timeLimitCompileMs, timeLimitExecutionMs) {
+const runJava = async function(messageId, main, tarBuffer, timeLimitCompileMs, timeLimitExecutionMs) {
 
-    const className = main.split('.')[0];
+  const className = main.split('.')[0];
 
-    let container = yield getContainer(tarBuffer, messageId);
+  let container = await getContainer(tarBuffer, messageId);
 
-    const javacCmd = ['javac', '-cp', 'home', `home/${main}`];
-    const javaCmd = ['java', '-Djava.security.manager', '-cp', 'home', className];
+  const javacCmd = ['javac', '-cp', 'home', `home/${main}`];
+  const javaCmd = ['java', '-Djava.security.manager', '-cp', 'home', className];
 
-    try {
-        const compileOutput = yield runCommand(javacCmd, container, timeLimitCompileMs, 'compilation');
+  try {
+    const compileOutput = await runCommand(javacCmd, container, timeLimitCompileMs, 'compilation');
 
-        if (executedCorrectly(compileOutput)) {
-
-
-            const runtimeOutput = yield runCommand(javaCmd, container, timeLimitExecutionMs, 'execution');
-
-            if (executedCorrectly(runtimeOutput)) {
-                //TODO: maybe also return compileOutput for warnings?
-                emitSuccess(runtimeOutput);
-
-            } else {
-                if (runtimeOutput.timeout) emitTimeout(runtimeOutput, 'execution');
-                else emitWrong(runtimeOutput, 'Runtime');
-            }
-
-        } else {
-            if (compileOutput.timeout) emitTimeout(compileOutput, 'compilation');
-            else emitWrong(compileOutput, 'Compile');
-        }
-
-        // Now we reuse healty containers, if we are below the maxContainers number
-        // yield container.stopAsync();
-        // yield container.removeAsync({f: true});
-        yield reuseOrDisposeContainer(container, false);
+    if (executedCorrectly(compileOutput)) {
 
 
-    } catch (e) { // internal error
-        //TODO: specify javaBox behavior for internal error
-        console.log('500: Internal error with Docker!');
-        emitServerError(e);
-        yield container.killAsync({t: 0});
-        yield container.removeAsync({v: true, force: true});
+      const runtimeOutput = await runCommand(javaCmd, container, timeLimitExecutionMs, 'execution');
+
+      if (executedCorrectly(runtimeOutput)) {
+        //TODO: maybe also return compileOutput for warnings?
+        emitSuccess(runtimeOutput);
+
+      } else {
+        if (runtimeOutput.timeout) emitTimeout(runtimeOutput, 'execution');
+        else emitWrong(runtimeOutput, 'Runtime');
+      }
+
+    } else {
+      if (compileOutput.timeout) emitTimeout(compileOutput, 'compilation');
+      else emitWrong(compileOutput, 'Compile');
     }
 
-});
+    // Now we reuse healty containers, if we are below the maxContainers number
+    // await container.stopAsync();
+    // await container.removeAsync({f: true});
+    await reuseOrDisposeContainer(container, false);
 
 
-const runJunit = coroutine(function*(messageId, junitFileNames, tarBuffer, timeLimitCompileMs, timeLimitExecutionMs) {
+  } catch (e) { // internal error
+    //TODO: specify javaBox behavior for internal error
+    console.log('500: Internal error with Docker!');
+    emitServerError(e);
+    await container.killAsync({
+      t: 0
+    });
+    await container.removeAsync({
+      v: true,
+      force: true
+    });
+  }
 
-    let junitFiles = [];
-    junitFileNames.forEach((f)=>{
-        junitFiles.push( f.name.split('.')[0]);
+};
+
+
+const runJunit = async function(messageId, junitFileNames, tarBuffer, timeLimitCompileMs, timeLimitExecutionMs) {
+
+  let junitFiles = [];
+  junitFileNames.forEach((f) => {
+    junitFiles.push(f.name.split('.')[0]);
+  });
+
+  const className = 'TestRunner';
+
+  let container = await getContainer(tarBuffer, messageId, true);
+
+  const javacCmd = ['javac', '-cp', 'home:libs:libs/junit-4.12:libs/hamcrest-core-1.3:libs/json-simple-1.1.1'];
+  let javaCmd = ['java', '-cp', 'home:libs:libs/junit-4.12:libs/hamcrest-core-1.3:libs/json-simple-1.1.1', className];
+
+  junitFiles.forEach((file) => {
+    javacCmd.push('home/' + file + '.java');
+    javaCmd.push(file);
+  });
+
+  try {
+    const compileOutput = await runCommand(javacCmd, container, timeLimitCompileMs, 'compilation');
+    if (executedCorrectly(compileOutput)) {
+
+      const runtimeOutput = await runCommand(javaCmd, container, timeLimitExecutionMs, 'execution');
+      if (executedCorrectly(runtimeOutput)) {
+        emitSuccess(runtimeOutput, true);
+
+      } else {
+        if (runtimeOutput.timeout) emitTimeout(runtimeOutput, 'execution');
+        else emitWrong(runtimeOutput, 'Runtime');
+      }
+
+    } else {
+      if (compileOutput.timeout) emitTimeout(compileOutput, 'compilation');
+      else emitWrong(compileOutput, 'Compile');
+    }
+
+    // Now container that did not have problems
+    // await container.stopAsync();
+    // await container.removeAsync({f: true});
+    await reuseOrDisposeContainer(container, true);
+
+  } catch (e) { // internal error
+    //TODO: specify javaBox behavior for internal error
+    console.log('500: Internal error with Docker!');
+    emitServerError(e);
+    await container.killAsync({
+      t: 0
+    });
+    await container.removeAsync({
+      v: true,
+      force: true
+    });
+  }
+
+};
+
+
+const initializeContainer = async function*(junit, tarBuffer, messageId) {
+
+  junit = junit || false;
+
+  const createOpts = {
+    Image: 'openjdk:8u121-jdk-alpine',
+    Tty: true,
+    Cmd: ['/bin/sh']
+  };
+  let container = Promise.promisifyAll(await docker.createContainerAsync(createOpts));
+
+  if (messageId === null || typeof messageId !== 'undefined')
+    container['messageId'] = messageId;
+
+  const startOps = {};
+  await container.startAsync(startOps);
+
+  if (tarBuffer === null || typeof tarBuffer !== 'undefined') {
+    const tarOptsSource = {
+      path: 'home'
+    };
+
+    await container.putArchiveAsync(tarBuffer, tarOptsSource);
+  }
+
+  if (junit) {
+    await container.putArchiveAsync('./archives/libs.tar', {
+      path: '/'
+    });
+    await container.putArchiveAsync('./archives/SecureTest.class.tar', {
+      path: 'libs'
+    });
+    await container.putArchiveAsync('./archives/TestRunner.class.tar', {
+      path: 'libs'
+    });
+  }
+
+  return container;
+};
+
+const getContainer = async function(tarBuffer, messageId, junit) {
+
+  junit = junit || false;
+
+  let container;
+
+  if (junit) {
+    console.log(jUnitContainers.length)
+    container = jUnitContainers.pop();
+
+  } else {
+    console.log(javaContainers.length)
+    container = javaContainers.pop();
+  }
+
+  if (typeof container == "undefined") {
+    container = await initializeContainer(junit, tarBuffer, messageId);
+  } else {
+    console.log("reusing")
+    // Updates the container to handle the new task
+    container['messageId'] = messageId;
+    const tarOptsSource = {
+      path: 'home'
+    };
+    await container.putArchiveAsync(tarBuffer, tarOptsSource);
+  }
+
+  // const inspectOps = {};
+  // let inspect = await container.inspect(inspectOps);
+  // console.log("Using container " + inspect.Id)
+
+  return container;
+};
+
+const reuseOrDisposeContainer = async function(container, junit) {
+
+  junit = junit || false;
+
+  let resolvedContainer;
+
+  if ((junit == true && jUnitContainers.length < maxContainers) || (junit == false && javaContainers.length < maxContainers)) {
+
+    await container.stop();
+    await container.remove({
+      v: true,
+      force: true
     });
 
-    const className = 'TestRunner';
-
-    let container = yield getContainer(tarBuffer, messageId, true);
-
-    const javacCmd = ['javac', '-cp', 'home:libs:libs/junit-4.12:libs/hamcrest-core-1.3:libs/json-simple-1.1.1'];
-    let javaCmd = ['java', '-cp', 'home:libs:libs/junit-4.12:libs/hamcrest-core-1.3:libs/json-simple-1.1.1', className];
-
-    junitFiles.forEach((file)=>{
-        javacCmd.push('home/' + file + '.java');
-        javaCmd.push(file);
-    });
-
-    try {
-        const compileOutput = yield runCommand(javacCmd, container, timeLimitCompileMs, 'compilation');
-        if (executedCorrectly(compileOutput)) {
-
-            const runtimeOutput = yield runCommand(javaCmd, container, timeLimitExecutionMs, 'execution');
-            if (executedCorrectly(runtimeOutput)) {
-                emitSuccess(runtimeOutput, true);
-
-            } else {
-                if (runtimeOutput.timeout) emitTimeout(runtimeOutput, 'execution');
-                else emitWrong(runtimeOutput, 'Runtime');
-            }
-
-        } else {
-            if (compileOutput.timeout) emitTimeout(compileOutput, 'compilation');
-            else emitWrong(compileOutput, 'Compile');
-        }
-
-        // Now container that did not have problems
-        // yield container.stopAsync();
-        // yield container.removeAsync({f: true});
-        yield reuseOrDisposeContainer(container, true);
-
-    } catch (e) { // internal error
-        //TODO: specify javaBox behavior for internal error
-        console.log('500: Internal error with Docker!');
-        emitServerError(e);
-        yield container.killAsync({t: 0});
-        yield container.removeAsync({v: true, force: true});
-    }
-
-});
-
-
-const initializeContainer = coroutine(function*(junit, tarBuffer, messageId) {
-
-    junit = junit || false;
-
-    const createOpts = {Image: 'openjdk:8u121-jdk-alpine', Tty: true, Cmd: ['/bin/sh']};
-    let container = Promise.promisifyAll(yield docker.createContainerAsync(createOpts));
-
-    if(messageId === null || typeof messageId !== 'undefined')
-        container['messageId'] = messageId;
-
-    const startOps = {};
-    yield container.startAsync(startOps);
-
-    if(tarBuffer === null || typeof tarBuffer !== 'undefined'){
-        const tarOptsSource = {path: 'home'};
-
-        yield container.putArchiveAsync(tarBuffer, tarOptsSource);
-    }
+    let newContainer = await initializeContainer(junit);
+    resolvedContainer = await Promise.resolve(newContainer);
 
     if (junit) {
-        yield container.putArchiveAsync('./archives/libs.tar', {path: '/'});
-        yield container.putArchiveAsync('./archives/SecureTest.class.tar', {path: 'libs'});
-        yield container.putArchiveAsync('./archives/TestRunner.class.tar', {path: 'libs'});
-    }
-
-    return container;
-});
-
-const getContainer = coroutine(function*(tarBuffer, messageId, junit) {
-
-    junit = junit || false;
-
-    let container;
-
-    if(junit){
-
-        console.log(jUnitContainers.length)
-
-        container = jUnitContainers.pop();
+      jUnitContainers.push(resolvedContainer);
 
     } else {
-
-        console.log(javaContainers.length)
-
-        container = javaContainers.pop();
+      javaContainers.push(resolvedContainer);
 
     }
 
-    if(typeof container == "undefined"){
-        container = yield initializeContainer(junit, tarBuffer, messageId);
-    } else {
-        console.log("reusing")
-        // Updates the container to handle the new task
-        container['messageId'] = messageId;
-        const tarOptsSource = {path: 'home'};
-        yield container.putArchiveAsync(tarBuffer, tarOptsSource);
-    }
-    
-    // const inspectOps = {};
-    // let inspect = yield container.inspect(inspectOps);
-    // console.log("Using container " + inspect.Id)
-
-    return container;
-});
-
-const reuseOrDisposeContainer = coroutine(function*(container, junit) {
-
-    junit = junit || false;
-
-    let resolvedContainer;
-
-    if((junit==true && jUnitContainers.length < maxContainers) || (junit==false && javaContainers.length < maxContainers)){
-
-        yield container.stop();
-        yield container.remove({v: true, force: true});
-
-        let newContainer = yield initializeContainer(junit);
-        resolvedContainer = yield Promise.resolve(newContainer);
-        
-        if(junit){
-
-            jUnitContainers.push(resolvedContainer);
-
-        } else {
-
-            javaContainers.push(resolvedContainer);
-
-        }
-
-    } else {
-        yield container.stop();
-        yield container.remove({v: true, force: true});
-    }
+  } else {
+    await container.stop();
+    await container.remove({
+      v: true,
+      force: true
+    });
+  }
 
 
-    return container;
-});
+  return container;
+};
 
 /**
  * Run a command inside a container, capture and return output streams and successful execution.
@@ -266,47 +289,50 @@ const reuseOrDisposeContainer = coroutine(function*(container, junit) {
  * @throws Error
  *
  */
-const runCommand = coroutine(function *(command, container, executionTimeLimit) {
+const runCommand = async function(command, container, executionTimeLimit) {
 
-    let timeoutCallback = null;
-    let timeoutHappend = false;
-    const stdoutStream = new OutputStream();
-    const stderrStream = new OutputStream();
-
-
-    const execOpts = {Cmd: command, AttachStdout: true, AttachStderr: true, Tty: false};            // execution options
-    const exec = Promise.promisifyAll(yield container.execAsync(execOpts));                         // create execution of command
-
-    const stream = yield exec.startAsync();                                                         // start execution (get an output stream)
-    container.modem.demuxStream(stream, stdoutStream, stderrStream);                                // intercept container output to our streams
-
-    if (executionTimeLimit) {                                                                        // start keeping time
-        timeoutCallback = setTimeout(() => {
-            timeoutHappend = true
-        }, executionTimeLimit);                // prepare timeout termination
-    }
+  let timeoutCallback = null;
+  let timeoutHappend = false;
+  const stdoutStream = new OutputStream();
+  const stderrStream = new OutputStream();
 
 
-    let executionData = yield exec.inspectAsync();
-    while (executionData.Running && timeoutHappend == false) {                                                                // loop (asynchronously) until execution stops
-        executionData = yield exec.inspectAsync();
-    }
+  const execOpts = {
+    Cmd: command,
+    AttachStdout: true,
+    AttachStderr: true,
+    Tty: false
+  }; // execution options
+  const exec = Promise.promisifyAll(await container.execAsync(execOpts)); // create execution of command
+
+  const stream = await exec.startAsync(); // start execution (get an output stream)
+  container.modem.demuxStream(stream, stdoutStream, stderrStream); // intercept container output to our streams
+
+  if (executionTimeLimit) { // start keeping time
+    timeoutCallback = setTimeout(() => {
+      timeoutHappend = true
+    }, executionTimeLimit); // prepare timeout termination
+  }
 
 
-    const executedSuccessfully = (executionData.ExitCode == 0 && timeoutHappend == false);                                    // set successful execution mark
-
-    if (executionTimeLimit) clearTimeout(timeoutCallback);
-
-    return {
-        messageId: container.messageId,
-        success: executedSuccessfully,
-        output: stdoutStream.toString(),
-        errorMessage: stderrStream.toString(),
-        timeout: timeoutHappend
-    }
+  let executionData = await exec.inspectAsync();
+  while (executionData.Running && timeoutHappend == false) { // loop (asynchronously) until execution stops
+    executionData = await exec.inspectAsync();
+  }
 
 
-});
+  const executedSuccessfully = (executionData.ExitCode == 0 && timeoutHappend == false); // set successful execution mark
+
+  if (executionTimeLimit) clearTimeout(timeoutCallback);
+
+  return {
+    messageId: container.messageId,
+    success: executedSuccessfully,
+    output: stdoutStream.toString(),
+    errorMessage: stderrStream.toString(),
+    timeout: timeoutHappend
+  }
+};
 
 /**
  * Given a possibly junit output, parses it and if it's junit, adds
@@ -316,28 +342,27 @@ const runCommand = coroutine(function *(command, container, executionTimeLimit) 
  *
  * @return {Object}: Contains stdout and possibly some info about junit tests.
  */
-function parseOutput(output){
+function parseOutput(output) {
 
-    const _INPUT_DELIMITER_ = '_!*^&_test-output';
+  const _INPUT_DELIMITER_ = '_!*^&_test-output';
+  const outputObject = {};
 
-    const outputObject = {};
+  outputObject.normalOutput = output.split(_INPUT_DELIMITER_)[0];
 
-    outputObject.normalOutput = output.split(_INPUT_DELIMITER_)[0];
+  let testOutput = null;
 
-    let testOutput = null;
+  try {
+    testOutput = JSON.parse(output.split(_INPUT_DELIMITER_)[1]);
 
-    try {
-        testOutput = JSON.parse(output.split(_INPUT_DELIMITER_)[1]);
+  } catch (err) {}
 
-    } catch(err) {}
+  if (testOutput) {
+    outputObject.totalNumberOfTests = testOutput.totalNumberOfTests;
+    outputObject.numberOfTestsPassed = testOutput.numberOfTestsPassed;
+    outputObject.testsOutput = testOutput.testsOutput;
+  }
 
-    if (testOutput){
-        outputObject.totalNumberOfTests  = testOutput.totalNumberOfTests;
-        outputObject.numberOfTestsPassed = testOutput.numberOfTestsPassed;
-        outputObject.testsOutput         = testOutput.testsOutput;
-    }
-
-    return outputObject;
+  return outputObject;
 }
 
 /**
@@ -349,11 +374,11 @@ function parseOutput(output){
  * @return {boolean}: `true` if command exited with code 0 and no time out occurred, `false` otherwise.
  */
 function executedCorrectly(result) {
-    return (result.success && !result.timeout);
+  return (result.success && !result.timeout);
 }
 
 function emitServerError(e) {
-    throw e;
+  throw e;
 }
 
 /**
@@ -363,37 +388,43 @@ function emitServerError(e) {
  * @param junit {Boolean} [Optional][Default: false]: Set to true if execution output is from junit orchestrator class for parsing.
  */
 function emitSuccess(executionOutput, junit) {
-    junit = junit || false;
-    const feedback = executionOutput;
+  junit = junit || false;
+  const feedback = executionOutput;
 
-    if (junit) {
-        const parsed = parseOutput(feedback.output);
-        feedback.output = parsed.normalOutput;
-        feedback.totalNumberOfTests = parsed.totalNumberOfTests;
-        feedback.numberOfTestsPassed = parsed.numberOfTestsPassed;
-        feedback.testsOutput = parsed.testsOutput;
-    }
-    javaBox.emit('result', feedback);
+  if (junit) {
+    const parsed = parseOutput(feedback.output);
+    feedback.output = parsed.normalOutput;
+    feedback.totalNumberOfTests = parsed.totalNumberOfTests;
+    feedback.numberOfTestsPassed = parsed.numberOfTestsPassed;
+    feedback.testsOutput = parsed.testsOutput;
+  }
+  javaBox.emit('result', feedback);
 }
 
 
-const j = schedule.scheduleJob('*/60 * * * * *', function(){
+const j = schedule.scheduleJob('*/60 * * * * *', function() {
   console.log('Cleaning old containers!');
 
   let container;
 
-  while(jUnitContainers.length >= maxContainers) {
+  while (jUnitContainers.length >= maxContainers) {
     container = jUnitContainers.pop();
     console.log("Removing container: " + container);
     container.stop();
-    container.remove({v: true, force: true});
+    container.remove({
+      v: true,
+      force: true
+    });
   }
 
-  while(javaContainers.length >= maxContainers) {
+  while (javaContainers.length >= maxContainers) {
     container = javaContainers.pop();
     console.log("Removing container: " + container);
     container.stop();
-    container.remove({v: true, force: true});
+    container.remove({
+      v: true,
+      force: true
+    });
   }
 
 });
@@ -404,18 +435,17 @@ const j = schedule.scheduleJob('*/60 * * * * *', function(){
  * @param feedback {Object}: The feedback with all the info to be emitted back.
  * @param stage {String}[Optional]: In which stage this function is called.
  */
-function emitTimeout(feedback, stage) {//messageId, stdoutStream, stderrStream, stage) {
+function emitTimeout(feedback, stage) { //messageId, stdoutStream, stderrStream, stage) {
 
+  feedback.errorMessage += '\n>>>JavaBox: Timeout reached';
 
-    feedback.errorMessage += '\n>>>JavaBox: Timeout reached';
+  if (stage) {
+    feedback.errorMessage += ` during ${stage}.`;
+  } else {
+    feedback.errorMessage += '.';
+  }
 
-    if (stage) {
-        feedback.errorMessage += ` during ${stage}.`;
-    } else {
-        feedback.errorMessage += '.';
-    }
-
-    javaBox.emit('result', feedback);
+  javaBox.emit('result', feedback);
 
 }
 
@@ -426,7 +456,7 @@ function emitTimeout(feedback, stage) {//messageId, stdoutStream, stderrStream, 
  * @param stage {String}[Optional]: In which stage this function is called.
  */
 function emitWrong(executionOutput, stage) {
-    javaBox.emit('result', executionOutput);
+  javaBox.emit('result', executionOutput);
 }
 
 

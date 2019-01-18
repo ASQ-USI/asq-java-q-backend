@@ -1,7 +1,6 @@
 const net = require('net');
 const JsonSocket = require('json-socket');
 const Promise = require('bluebird');
-const coroutine = Promise.coroutine;
 
 /**
  * @typdef {Object} JsonSocket
@@ -48,27 +47,26 @@ server.listen = Promise.promisify(server.listen);
  *
  * @return {Server}: server event emitter object ()
  */
-const init = coroutine(function*(port, mongoAddress, mongoCollection, defaultConcurrency, maxConcurrency) {
+const init = async function(port, mongoAddress, mongoCollection, defaultConcurrency, maxConcurrency) {
+  const mongoFullAddress = `mongodb://${mongoAddress}`;
+  const queueInitParams = {
+    mongoFullAddress,
+    mongoCollection,
+    maxConcurrency,
+    defaultConcurrency
+  };
+  await queue.initialize(queueInitParams, processMessageJob);
+  queue.start();
 
-    const mongoFullAddress = `mongodb://${mongoAddress}`;
-    const queueInitParams = {
-        mongoFullAddress,
-        mongoCollection,
-        maxConcurrency,
-        defaultConcurrency
-    };
-    yield queue.initialize(queueInitParams, processMessageJob);
-    queue.start();
 
+  server.on('connection', initSocket);
+  server.on('result', sendResult);
 
-    server.on('connection', initSocket);
-    server.on('result', sendResult);
+  await server.listen(port);
+  console.log(`JavaBox listening on port ${port}...`);
 
-    yield server.listen(port);
-    console.log(`JavaBox listening on port ${port}...`);
-
-    return server;
-});
+  return server;
+};
 
 
 /**
@@ -80,8 +78,8 @@ const init = coroutine(function*(port, mongoAddress, mongoCollection, defaultCon
 function initSocket(connection) {
 
 
-    const socket = new JsonSocket(connection);
-    socket.on('message', addMessageInQueue.bind(null, socket));
+  const socket = new JsonSocket(connection);
+  socket.on('message', addMessageInQueue.bind(null, socket));
 }
 
 /**
@@ -91,8 +89,11 @@ function initSocket(connection) {
  */
 function addMessageInQueue(socket, request) {
 
-    const messageId = queue.addMessage(request);
-    messages[messageId] = {socket: socket, request: request};
+  const messageId = queue.addMessage(request);
+  messages[messageId] = {
+    socket: socket,
+    request: request
+  };
 }
 
 /**
@@ -102,19 +103,19 @@ function addMessageInQueue(socket, request) {
  */
 function processMessageJob(job, done) {
 
-    const request = job.attrs.data.request;
-    const messageId = job.attrs.data.messageId;
+  const request = job.attrs.data.request;
+  const messageId = job.attrs.data.messageId;
 
-    messages[messageId]['done'] = done;
+  messages[messageId]['done'] = done;
 
-    if (isRequestValid(request)) {
-        executeRequest(request, messageId);
+  if (isRequestValid(request)) {
+    executeRequest(request, messageId);
 
-    } else {
-        sendResultForBadRequest(messageId);
-    }
+  } else {
+    sendResultForBadRequest(messageId);
+  }
 
-    //done(); // not needed, useful for async code
+  //done(); // not needed, useful for async code
 }
 /**
  * Checks whether a request is valid or not, given the request specification
@@ -123,20 +124,20 @@ function processMessageJob(job, done) {
  * @return {boolean} : Returns `false` if request has one or more missing properties or illogical values, `true` otherwise.
  */
 function isRequestValid(request) {
-    const main = request.submission.main;
-    const files = request.submission.files;
-    const tests = request.submission.tests;
-    const timeLimitCompileMs = request.compileTimeoutMs;
-    const timeLimitExecutionMs = request.executionTimeoutMs;
-    const charactersMaxLength = request.charactersMaxLength;
+  const main = request.submission.main;
+  const files = request.submission.files;
+  const tests = request.submission.tests;
+  const timeLimitCompileMs = request.compileTimeoutMs;
+  const timeLimitExecutionMs = request.executionTimeoutMs;
+  const charactersMaxLength = request.charactersMaxLength;
 
-    if (!((main || tests) && files && timeLimitCompileMs && timeLimitExecutionMs && charactersMaxLength)) { // absence of parameter
-        return false;
-    } else if (!(timeLimitCompileMs > 0 && timeLimitExecutionMs > 0)) {             // illogical values for timeout
-        return false;
-    } else {
-        return true;
-    }
+  if (!((main || tests) && files && timeLimitCompileMs && timeLimitExecutionMs && charactersMaxLength)) { // absence of parameter
+    return false;
+  } else if (!(timeLimitCompileMs > 0 && timeLimitExecutionMs > 0)) { // illogical values for timeout
+    return false;
+  } else {
+    return true;
+  }
 }
 
 /**
@@ -144,14 +145,14 @@ function isRequestValid(request) {
  * @param messageId {String}: The id in the queue of the bad request message.
  */
 function sendResultForBadRequest(messageId) {
-    const message = messages[messageId];
-    const socket = message.socket;
-    const clientId = message.request.clientId;
-    try {
-        socket.sendEndMessage({}); //TODO: define output for bad requests
-    } catch (e) {
-        console.log(`73: Socket with client ${clientId} closed before sending result back.`);
-    }
+  const message = messages[messageId];
+  const socket = message.socket;
+  const clientId = message.request.clientId;
+  try {
+    socket.sendEndMessage({}); //TODO: define output for bad requests
+  } catch (e) {
+    console.log(`73: Socket with client ${clientId} closed before sending result back.`);
+  }
 }
 
 /**
@@ -161,23 +162,23 @@ function sendResultForBadRequest(messageId) {
  */
 function executeRequest(request, messageId) {
 
-    console.log('executing request for ' + messageId);
-    const main = request.submission.main;
-    const files = request.submission.files;
-    const tests = request.submission.tests;
-    const timeLimitCompileMs = request.compileTimeoutMs;
-    const timeLimitExecutionMs = request.executionTimeoutMs;
+  console.log('executing request for ' + messageId);
+  const main = request.submission.main;
+  const files = request.submission.files;
+  const tests = request.submission.tests;
+  const timeLimitCompileMs = request.compileTimeoutMs;
+  const timeLimitExecutionMs = request.executionTimeoutMs;
 
 
-    if (tests && Array.isArray(tests) && tests.length > 0) { // run junit tests
+  if (tests && Array.isArray(tests) && tests.length > 0) { // run junit tests
 
-        server.emit('runJunit', messageId, tests, files, timeLimitCompileMs, timeLimitExecutionMs);
+    server.emit('runJunit', messageId, tests, files, timeLimitCompileMs, timeLimitExecutionMs);
 
-    } else {      // run normal java code
+  } else { // run normal java code
 
-        server.emit('runJava', messageId, main, files, timeLimitCompileMs, timeLimitExecutionMs);
+    server.emit('runJava', messageId, main, files, timeLimitCompileMs, timeLimitExecutionMs);
 
-    }
+  }
 }
 /**
  * Correct and truncates the feedback and sends it back. Also closes connection.
@@ -186,30 +187,30 @@ function executeRequest(request, messageId) {
  */
 function sendResult(feedback) {
 
-    console.log('>>sending back to ' + feedback.messageId);
+  console.log('>>sending back to ' + feedback.messageId);
 
-    const message = messages[feedback.messageId];
-    const socket = message.socket;
-    const clientId = message.request.clientId;
-    const charactersMaxLength = message.request.charactersMaxLength;
-    const done = message.done;
+  const message = messages[feedback.messageId];
+  const socket = message.socket;
+  const clientId = message.request.clientId;
+  const charactersMaxLength = message.request.charactersMaxLength;
+  const done = message.done;
 
-    feedback['clientId'] = clientId;
+  feedback['clientId'] = clientId;
 
-    if (feedback.output.length > charactersMaxLength) {
-        feedback.output = feedback.output.substring(0, charactersMaxLength);
-    }
-    if (feedback.errorMessage.length > charactersMaxLength) {
-        feedback.errorMessage = feedback.errorMessage.substring(5, charactersMaxLength);
-    }
+  if (feedback.output.length > charactersMaxLength) {
+    feedback.output = feedback.output.substring(0, charactersMaxLength);
+  }
+  if (feedback.errorMessage.length > charactersMaxLength) {
+    feedback.errorMessage = feedback.errorMessage.substring(5, charactersMaxLength);
+  }
 
-    try {
-        socket.sendEndMessage(feedback);
-    } catch (e) {
-        console.log(`73: Socket with client ${clientId} closed before sending result back.`);
-    }
+  try {
+    socket.sendEndMessage(feedback);
+  } catch (e) {
+    console.log(`73: Socket with client ${clientId} closed before sending result back.`);
+  }
 
-    done();
+  done();
 }
 
 
