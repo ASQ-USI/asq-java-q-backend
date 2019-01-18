@@ -5,9 +5,7 @@ const coroutine = Promise.coroutine;
 const Docker = require('dockerode');
 const concat = require('concat-stream');
 const OutputStream = require('./containerOutputStream');
-
-
-
+const schedule = require('node-schedule');
 
 
 /**
@@ -27,11 +25,25 @@ const OutputStream = require('./containerOutputStream');
 const docker = Promise.promisifyAll(new Docker());
 
 /**
+ * Docker containers that can be reused.
+ * TODO: tweak the size in a smarter way, as well as pre-populate it
+ * @type {Array}
+ */
+const javaContainers = Promise.promisifyAll(new Array());
+const jUnitContainers = Promise.promisifyAll(new Array());
+
+/**
+ * Maximum of number containers to be available. This should be the same value as the maximum number of concurrent computations accepted
+ * TODO: tweak the size in a smarter way, as well as pre-populate it
+ * @type {Inf}
+ */
+const maxContainers = 20;
+
+/**
  * JavaBox eventEmitter.
  * @type {EventEmitter}
  */
 const javaBox = new EventEmitter();
-
 
 
 /**
@@ -46,10 +58,9 @@ const javaBox = new EventEmitter();
  */
 const runJava = coroutine(function*(messageId, main, tarBuffer, timeLimitCompileMs, timeLimitExecutionMs) {
 
-
     const className = main.split('.')[0];
 
-    let container = yield initializeContainer(tarBuffer, messageId);
+    let container = yield getContainer(tarBuffer, messageId);
 
     const javacCmd = ['javac', '-cp', 'home', `home/${main}`];
     const javaCmd = ['java', '-Djava.security.manager', '-cp', 'home', className];
@@ -76,8 +87,10 @@ const runJava = coroutine(function*(messageId, main, tarBuffer, timeLimitCompile
             else emitWrong(compileOutput, 'Compile');
         }
 
-        yield container.stopAsync();
-        yield container.removeAsync({f: true});
+        // Now we reuse healty containers, if we are below the maxContainers number
+        // yield container.stopAsync();
+        // yield container.removeAsync({f: true});
+        yield reuseOrDisposeContainer(container, false);
 
 
     } catch (e) { // internal error
@@ -85,7 +98,7 @@ const runJava = coroutine(function*(messageId, main, tarBuffer, timeLimitCompile
         console.log('500: Internal error with Docker!');
         emitServerError(e);
         yield container.killAsync({t: 0});
-        yield container.removeAsync({f: true});
+        yield container.removeAsync({v: true, force: true});
     }
 
 });
@@ -100,10 +113,10 @@ const runJunit = coroutine(function*(messageId, junitFileNames, tarBuffer, timeL
 
     const className = 'TestRunner';
 
-    let container = yield initializeContainer(tarBuffer, messageId, true);
+    let container = yield getContainer(tarBuffer, messageId, true);
 
-    const javacCmd = ['javac', '-cp', 'home:libs/junit-4.12:libs/hamcrest-core-1.3:libs/json-simple-1.1.1'];
-    let javaCmd = ['java', '-cp', 'home:libs/junit-4.12:libs/hamcrest-core-1.3:libs/json-simple-1.1.1', className];
+    const javacCmd = ['javac', '-cp', 'home:libs:libs/junit-4.12:libs/hamcrest-core-1.3:libs/json-simple-1.1.1'];
+    let javaCmd = ['java', '-cp', 'home:libs:libs/junit-4.12:libs/hamcrest-core-1.3:libs/json-simple-1.1.1', className];
 
     junitFiles.forEach((file)=>{
         javacCmd.push('home/' + file + '.java');
@@ -128,43 +141,119 @@ const runJunit = coroutine(function*(messageId, junitFileNames, tarBuffer, timeL
             else emitWrong(compileOutput, 'Compile');
         }
 
-
-        yield container.stopAsync();
-        yield container.removeAsync({f: true});
+        // Now container that did not have problems
+        // yield container.stopAsync();
+        // yield container.removeAsync({f: true});
+        yield reuseOrDisposeContainer(container, true);
 
     } catch (e) { // internal error
         //TODO: specify javaBox behavior for internal error
         console.log('500: Internal error with Docker!');
         emitServerError(e);
         yield container.killAsync({t: 0});
-        yield container.removeAsync({f: true});
+        yield container.removeAsync({v: true, force: true});
     }
 
 });
 
 
-const initializeContainer = coroutine(function*(tarBuffer, messageId, junit) {
+const initializeContainer = coroutine(function*(junit, tarBuffer, messageId) {
 
     junit = junit || false;
 
-    const createOpts = {Image: 'openjdk:8u111-jdk', Tty: true, Cmd: ['/bin/bash']};
+    const createOpts = {Image: 'openjdk:8u121-jdk-alpine', Tty: true, Cmd: ['/bin/sh']};
     let container = Promise.promisifyAll(yield docker.createContainerAsync(createOpts));
-    container['messageId'] = messageId;
+
+    if(messageId === null || typeof messageId !== 'undefined')
+        container['messageId'] = messageId;
 
     const startOps = {};
     yield container.startAsync(startOps);
 
-    const tarOptsSource = {path: 'home'};
-    yield container.putArchiveAsync(tarBuffer, tarOptsSource);
+    if(tarBuffer === null || typeof tarBuffer !== 'undefined'){
+        const tarOptsSource = {path: 'home'};
+
+        yield container.putArchiveAsync(tarBuffer, tarOptsSource);
+    }
 
     if (junit) {
-        yield container.putArchiveAsync('./archives/SecureTest.class.tar', {path: 'home'});
-        yield container.putArchive('./archives/libs.tar', {path: '/'});
+        yield container.putArchiveAsync('./archives/libs.tar', {path: '/'});
+        yield container.putArchiveAsync('./archives/SecureTest.class.tar', {path: 'libs'});
+        yield container.putArchiveAsync('./archives/TestRunner.class.tar', {path: 'libs'});
     }
 
     return container;
 });
 
+const getContainer = coroutine(function*(tarBuffer, messageId, junit) {
+
+    junit = junit || false;
+
+    let container;
+
+    if(junit){
+
+        console.log(jUnitContainers.length)
+
+        container = jUnitContainers.pop();
+
+    } else {
+
+        console.log(javaContainers.length)
+
+        container = javaContainers.pop();
+
+    }
+
+    if(typeof container == "undefined"){
+        container = yield initializeContainer(junit, tarBuffer, messageId);
+    } else {
+        console.log("reusing")
+        // Updates the container to handle the new task
+        container['messageId'] = messageId;
+        const tarOptsSource = {path: 'home'};
+        yield container.putArchiveAsync(tarBuffer, tarOptsSource);
+    }
+    
+    // const inspectOps = {};
+    // let inspect = yield container.inspect(inspectOps);
+    // console.log("Using container " + inspect.Id)
+
+    return container;
+});
+
+const reuseOrDisposeContainer = coroutine(function*(container, junit) {
+
+    junit = junit || false;
+
+    let resolvedContainer;
+
+    if((junit==true && jUnitContainers.length < maxContainers) || (junit==false && javaContainers.length < maxContainers)){
+
+        yield container.stop();
+        yield container.remove({v: true, force: true});
+
+        let newContainer = yield initializeContainer(junit);
+        resolvedContainer = yield Promise.resolve(newContainer);
+        
+        if(junit){
+
+            jUnitContainers.push(resolvedContainer);
+
+        } else {
+
+            javaContainers.push(resolvedContainer);
+
+        }
+
+    } else {
+        yield container.stop();
+        yield container.remove({v: true, force: true});
+    }
+
+
+    return container;
+});
 
 /**
  * Run a command inside a container, capture and return output streams and successful execution.
@@ -286,6 +375,28 @@ function emitSuccess(executionOutput, junit) {
     }
     javaBox.emit('result', feedback);
 }
+
+
+const j = schedule.scheduleJob('*/60 * * * * *', function(){
+  console.log('Cleaning old containers!');
+
+  let container;
+
+  while(jUnitContainers.length >= maxContainers) {
+    container = jUnitContainers.pop();
+    console.log("Removing container: " + container);
+    container.stop();
+    container.remove({v: true, force: true});
+  }
+
+  while(javaContainers.length >= maxContainers) {
+    container = javaContainers.pop();
+    console.log("Removing container: " + container);
+    container.stop();
+    container.remove({v: true, force: true});
+  }
+
+});
 
 /**
  * Emit `result` event with timeout values and error message.

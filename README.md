@@ -7,18 +7,18 @@ Backend for sandboxed Java execution for the asq-java-q question type
 To run the service, you need docker running on the machine and access to a mongo database.
 
 Before installing npm dependencies with ```$ npm install``` make sure that docker is running.
-Otherwise you need to do ```$ docker pull openjdk:8u111-jdk``` to download the right openjdk image.
+Otherwise you need to do ```$ docker pull openjdk:8u121-jdk-alpine``` to download the right openjdk image.
 
 To run the server use:
 
-```$ node app.js [-p port number] [-a mongo adress] [-c mongo collection] [-d default concurrent jobs number] [-m max concurrent jobs number]```
+```$ node app.js [-p port number] [-a mongo address] [-c mongo collection] [-d default concurrent jobs number] [-m max concurrent jobs number]```
 
 Defaults are:
 - Port number: 5016
 - Mongo address: 127.0.0.1/queue
 - Mongo collection: agendaJobs
-- Default concurrent jobs number: 40
-- Max concurrent jobs number: 70
+- Default concurrent jobs number: 20
+- Max concurrent jobs number: 50
 
 
 ## Communication API

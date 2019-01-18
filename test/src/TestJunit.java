@@ -2,7 +2,7 @@ import org.junit.*;
 
 import static org.junit.Assert.assertEquals;
 
-public class TestJunit extends SecureTest{
+public class TestJunit extends SecureTest {
 
     String message = "Hello World";
     MessageUtil messageUtil = new MessageUtil(message);

@@ -14,8 +14,8 @@ const main = coroutine(function*() {
         {name: 'port', alias: 'p', type: Number, defaultValue: 5016},
         {name: 'mongoAddress', alias: 'a', type: String, defaultValue: '127.0.0.1/queue'},
         {name: 'mongoCollection', alias: 'c', type: String, defaultValue: 'agendaJobs'},
-        {name: 'defaultConcurrency', alias: 'd', type: Number, defaultValue: 40},
-        {name: 'maxConcurrency', alias: 'm', type: Number, defaultValue: 70}
+        {name: 'defaultConcurrency', alias: 'd', type: Number, defaultValue: 20},
+        {name: 'maxConcurrency', alias: 'm', type: Number, defaultValue: 50}
     ];
     /**
      * Object that for keys has command line argument names
@@ -84,10 +84,11 @@ const main = coroutine(function*() {
         files = files.concat(tests);
 
         const pack = tar.pack();
-        const packEntry = Promise.promisify(pack.entry, {context: pack});
+        // const packEntry = Promise.promisify(pack.entry, {context: pack});
 
         Promise.map(files, function (file) {
-            return packEntry({name: file.name}, file.data);
+            // return packEntry({name: file.name}, file.data);
+            return pack.entry({name: file.name}, file.data);
 
         }).then(function () {
             const tarBuffer = pack.read();

@@ -14,6 +14,6 @@ public class TestJunit2 extends SecureTest {
 
     @Test
     public void foo() {
-        assertEquals(1, 1);
+        assertEquals(1, 2);
     }
 }

@@ -112,8 +112,8 @@ function makeConnection(clientId) {
         const message = {
             clientId : clientId,
             submission : submission,
-            compileTimeoutMs: 15000,
-            executionTimeoutMs: 6000,
+            compileTimeoutMs: 60000,
+            executionTimeoutMs: 20000,
             charactersMaxLength: 1000
 
         };
@@ -134,6 +134,7 @@ function makeConnection(clientId) {
         });
     });
 }
+
 for (var i = 0; i < clientsNumber; i++) {
     const clientId = 'client' + i;
     makeConnection(clientId);
